@@ -272,8 +272,12 @@ def get_scaled_stylesheet(scale_factor, code_font, ui_font):
     """
 
 
+
+
 # Additional theme variants could be defined here
 def get_light_theme(scale_factor, code_font, ui_font):
     """Generate a light theme stylesheet"""
     # Implementation for light theme would go here
     pass
+
+
