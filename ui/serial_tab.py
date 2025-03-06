@@ -1,22 +1,24 @@
 """
-Serial Monitor tab UI component.
+Enhanced Serial Monitor tab UI component with improved layout and features.
 """
 import os
 import json
 from datetime import datetime
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
                            QLineEdit, QPushButton, QLabel, QComboBox, 
-                           QInputDialog, QMessageBox)
+                           QInputDialog, QMessageBox, QGroupBox, QSplitter,
+                           QFrame, QFileDialog, QCompleter)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QTextCursor, QColor, QTextCharFormat, QFont
+from PyQt6.QtGui import QTextCursor, QColor, QTextCharFormat, QFont, QPalette
 
 from core.serial_monitor import SerialMonitor
 from core.serial_thread import SerialThread
 from core.command_sequence import CommandSequence
+from theme_config import get_scaled_stylesheet, COLORS
 
 
 class SerialTab(QWidget):
-    """Serial Monitor tab UI component."""
+    """Enhanced Serial Monitor tab UI component."""
     
     # Define signals for communication with parent
     status_message = pyqtSignal(str, int)  # message, timeout
@@ -24,7 +26,7 @@ class SerialTab(QWidget):
     
     def __init__(self, ui_scaler, parent=None):
         """
-        Initialize the Serial tab component.
+        Initialize the Enhanced Serial tab component.
         
         Args:
             ui_scaler: UIScaler instance for responsive UI
@@ -48,22 +50,46 @@ class SerialTab(QWidget):
         # Setup UI
         self.init_ui()
         self.setup_fonts()
+        self.setup_command_completer()
         self.update_port_list()
+        
+        # Initialize stats
+        self.rx_bytes = 0
+        self.tx_bytes = 0
+        self.last_rx = 0
+        self.last_tx = 0
+        self.last_time = datetime.now()
+        
+        # Create timer for stats update
+        self.stats_timer = QTimer()
+        self.stats_timer.timeout.connect(self.update_stats)
+        self.stats_timer.start(1000)  # Update every second
     
     def init_ui(self):
-        """Initialize the Serial Monitor tab UI."""
-        serial_layout = QVBoxLayout(self)
-        self.scaler.spacing(serial_layout, 10)
-        self.scaler.margins(serial_layout, 10, 10, 10, 10)
-
-        # Top control panel
-        control_panel = QWidget()
-        control_panel.setObjectName("controlPanel")
-        control_layout = QHBoxLayout(control_panel)
-        self.scaler.margins(control_layout, 10, 10, 10, 10)
+        """Initialize the Enhanced Serial Monitor tab UI."""
+        main_layout = QVBoxLayout(self)
+        self.scaler.spacing(main_layout, 10)
+        self.scaler.margins(main_layout, 10, 10, 10, 10)
+        
+        # Apply the theme stylesheet
+        self.setStyleSheet(get_scaled_stylesheet(
+            scale_factor=1.0,  # Assuming the scaler handles this elsewhere
+            code_font="JetBrains Mono, Fira Code, Source Code Pro, Consolas, Courier New",
+            ui_font="Segoe UI, Roboto, Arial, sans-serif"
+        ))
+        
+        # Create the main splitter for flexible layout
+        main_splitter = QSplitter(Qt.Orientation.Vertical)
+        main_splitter.setChildrenCollapsible(False)
+        
+        # Top control panel with connection and sequence controls
+        top_panel = QWidget()
+        top_panel.setObjectName("topPanel")
+        top_layout = QHBoxLayout(top_panel)
+        self.scaler.spacing(top_layout, 10)
         
         # Connection controls group
-        connection_group = QWidget()
+        connection_group = QGroupBox("Connection Settings")
         connection_group.setObjectName("connectionGroup")
         connection_layout = QVBoxLayout(connection_group)
         self.scaler.spacing(connection_layout, 8)
@@ -110,14 +136,20 @@ class SerialTab(QWidget):
         self.connect_button.clicked.connect(self.toggle_connection)
         connection_layout.addWidget(self.connect_button)
         
-        control_layout.addWidget(connection_group)
+        # Add connection status indicator
+        self.connection_status = QLabel("Status: Disconnected")
+        self.connection_status.setObjectName("statusLabel")
+        self.connection_status.setStyleSheet(f"color: {COLORS['status_disconnected']};")
+        connection_layout.addWidget(self.connection_status)
+        
+        top_layout.addWidget(connection_group, 1)
         
         # Sequence controls group
-        sequence_panel = QWidget()
-        sequence_panel.setObjectName("sequencePanel")
-        sequence_layout = QVBoxLayout(sequence_panel)
+        sequence_group = QGroupBox("Command Sequences")
+        sequence_group.setObjectName("sequenceGroup")
+        sequence_layout = QVBoxLayout(sequence_group)
         
-        sequence_header = QLabel("COMMAND SEQUENCES")
+        sequence_header = QLabel("Load and run predefined command sequences")
         sequence_header.setObjectName("sectionLabel")
         sequence_layout.addWidget(sequence_header)
         
@@ -142,27 +174,63 @@ class SerialTab(QWidget):
         self.delete_sequence_button.clicked.connect(self.delete_selected_sequence)
         sequence_buttons_layout.addWidget(self.delete_sequence_button)
         
+        # Add export/import buttons
+        self.export_sequences_button = QPushButton("Export All")
+        self.export_sequences_button.clicked.connect(self.export_sequences)
+        sequence_buttons_layout.addWidget(self.export_sequences_button)
+        
         sequence_layout.addLayout(sequence_buttons_layout)
         
-        control_layout.addWidget(sequence_panel)
-        control_layout.setStretch(0, 1)
-        control_layout.setStretch(1, 2)
+        top_layout.addWidget(sequence_group, 2)
         
-        serial_layout.addWidget(control_panel)
-
-        # RX Display with styled header
+        # Add the top panel to main splitter
+        main_splitter.addWidget(top_panel)
+        
+        # Middle panel with I/O displays
+        io_panel = QWidget()
+        io_panel.setObjectName("ioPanel")
+        io_layout = QVBoxLayout(io_panel)
+        self.scaler.spacing(io_layout, 10)
+        
+        # Create a splitter for RX and TX displays - horizontal arrangement
+        display_splitter = QSplitter(Qt.Orientation.Horizontal)
+        display_splitter.setChildrenCollapsible(False)
+        
+        # RX Display with styled header (left panel)
         rx_panel = QWidget()
         rx_panel.setObjectName("rxPanel")
         rx_layout = QVBoxLayout(rx_panel)
+        rx_layout.setContentsMargins(0, 0, 5, 0)  # Add a small right margin
         
         rx_header = QWidget()
         rx_header.setObjectName("displayHeader")
         rx_header_layout = QHBoxLayout(rx_header)
         
-        rx_title = QLabel("INCOMING TRANSMISSION")
+        rx_title = QLabel("INCOMING DATA (RX)")
         rx_title.setObjectName("displayTitle")
         rx_header_layout.addWidget(rx_title)
+        
+        # Add RX stats display
+        self.rx_stats_label = QLabel("0 B/s (0 bytes total)")
+        self.rx_stats_label.setObjectName("statsLabel")
+        rx_header_layout.addWidget(self.rx_stats_label)
+        
         rx_header_layout.addStretch()
+        
+        # RX filter toggle
+        self.filter_rx_toggle = QPushButton("Filter")
+        self.filter_rx_toggle.setObjectName("toggleButton")
+        self.filter_rx_toggle.setCheckable(True)
+        self.filter_rx_toggle.setToolTip(
+            "Filter Incoming Data\n\n"
+            "When enabled, this filter:\n"
+            "• Shows normal printable characters as-is\n"
+            "• Preserves newlines, tabs, and carriage returns\n"
+            "• Displays other non-printable characters as hex values [XX]\n\n"
+            "Useful for protocols with binary data or control characters."
+        )
+        self.filter_rx_toggle.clicked.connect(self.toggle_rx_filter)
+        rx_header_layout.addWidget(self.filter_rx_toggle)
         
         self.clear_rx_button = QPushButton("Clear")
         self.clear_rx_button.setObjectName("clearButton")
@@ -176,20 +244,27 @@ class SerialTab(QWidget):
         self.rx_display.setObjectName("rxDisplay")
         rx_layout.addWidget(self.rx_display)
         
-        serial_layout.addWidget(rx_panel, 10)  # More space for RX
-
-        # TX Display with styled header
+        display_splitter.addWidget(rx_panel)
+        
+        # TX Display with styled header (right panel)
         tx_panel = QWidget()
         tx_panel.setObjectName("txPanel")
         tx_layout = QVBoxLayout(tx_panel)
+        tx_layout.setContentsMargins(5, 0, 0, 0)  # Add a small left margin
         
         tx_header = QWidget()
         tx_header.setObjectName("displayHeader")
         tx_header_layout = QHBoxLayout(tx_header)
         
-        tx_title = QLabel("OUTGOING TRANSMISSION")
+        tx_title = QLabel("OUTGOING DATA (TX)")
         tx_title.setObjectName("displayTitle")
         tx_header_layout.addWidget(tx_title)
+        
+        # Add TX stats display
+        self.tx_stats_label = QLabel("0 B/s (0 bytes total)")
+        self.tx_stats_label.setObjectName("statsLabel")
+        tx_header_layout.addWidget(self.tx_stats_label)
+        
         tx_header_layout.addStretch()
         
         self.clear_tx_button = QPushButton("Clear")
@@ -204,58 +279,79 @@ class SerialTab(QWidget):
         self.tx_display.setObjectName("txDisplay")
         tx_layout.addWidget(self.tx_display)
         
-        serial_layout.addWidget(tx_panel, 2)  # Less space for TX
-
-        # Bottom control panel
+        display_splitter.addWidget(tx_panel)
+        
+        # Set initial sizes for display splitter - left (RX) wider than right (TX)
+        display_splitter.setSizes([self.scaler.value(700), self.scaler.value(300)])
+        
+        io_layout.addWidget(display_splitter)
+        
+        # Add IO panel to main splitter
+        main_splitter.addWidget(io_panel)
+        
+        # Bottom control panel - IMPROVED LAYOUT
         bottom_panel = QWidget()
         bottom_panel.setObjectName("bottomPanel")
         bottom_layout = QVBoxLayout(bottom_panel)
+        self.scaler.spacing(bottom_layout, 8)
         
-        # Input section
-        input_panel = QWidget()
-        input_panel.setObjectName("inputPanel")
-        input_layout = QHBoxLayout(input_panel)
-        self.scaler.margins(input_layout, 10, 10, 10, 10)
+        # Create a unified input and control row
+        command_row = QHBoxLayout()
+        self.scaler.spacing(command_row, 10)
         
+        # Left section: History button
+        self.history_button = QPushButton("↑")
+        self.history_button.setToolTip("Command History")
+        self.history_button.setObjectName("iconButton")
+        self.history_button.setFixedSize(self.scaler.value(30), self.scaler.value(30))
+        self.history_button.clicked.connect(self.show_command_history)
+        command_row.addWidget(self.history_button)
+        
+        # Center section: Input line with larger proportion
         self.input_line = QLineEdit()
         self.input_line.setObjectName("commandInput")
         self.input_line.setPlaceholderText("Type command here...")
         self.input_line.returnPressed.connect(self.send_data)
-        input_layout.addWidget(self.input_line)
+        command_row.addWidget(self.input_line, 3)  # Give it more space proportion
         
-        bottom_layout.addWidget(input_panel)
+        # Right section: Special keys and send button in a grouped layout
+        keys_send_layout = QHBoxLayout()
+        keys_send_layout.setSpacing(self.scaler.value(4))
         
-        # Control buttons layout
-        controls_panel = QWidget()
-        controls_panel.setObjectName("controlsPanel")
-        controls_layout = QHBoxLayout(controls_panel)
-        
-        # Special keys section
-        keys_group = QWidget()
-        keys_group.setObjectName("keysGroup")
-        keys_layout = QHBoxLayout(keys_group)
-        self.scaler.spacing(keys_layout, 8)
-        
-        self.transmit_button = QPushButton("⚡ TRANSMIT")
-        self.transmit_button.setObjectName("transmitButton")
-        self.transmit_button.clicked.connect(self.send_data)
-        keys_layout.addWidget(self.transmit_button)
-        
-        keys_layout.addSpacing(self.scaler.value(20))
-        
-        keys_label = QLabel("SPECIAL KEYS:")
-        keys_label.setObjectName("keysLabel")
-        keys_layout.addWidget(keys_label)
-        
+        # Special keys directly in the layout
         self.enter_key = QPushButton("ENTER")
         self.enter_key.setObjectName("specialKey")
         self.enter_key.clicked.connect(lambda: self.send_special_key("Enter"))
-        keys_layout.addWidget(self.enter_key)
+        keys_send_layout.addWidget(self.enter_key)
         
         self.esc_key = QPushButton("ESC")
         self.esc_key.setObjectName("specialKey")
         self.esc_key.clicked.connect(lambda: self.send_special_key("Escape"))
-        keys_layout.addWidget(self.esc_key)
+        keys_send_layout.addWidget(self.esc_key)
+        
+        # Send button - now adjacent to special keys
+        self.send_button = QPushButton("Send")
+        self.send_button.setObjectName("sendButton")
+        self.send_button.clicked.connect(self.send_data)
+        keys_send_layout.addWidget(self.send_button)
+        
+        command_row.addLayout(keys_send_layout, 2)
+        bottom_layout.addLayout(command_row)
+        
+        # Add command templates section
+        templates_layout = self.add_command_templates()
+        bottom_layout.addLayout(templates_layout)
+        
+        # Additional controls layout
+        controls_panel = QWidget()
+        controls_panel.setObjectName("controlsPanel")
+        controls_layout = QHBoxLayout(controls_panel)
+        
+        # Extended special keys section
+        keys_group = QGroupBox("Special Keys")
+        keys_group.setObjectName("keysGroup")
+        keys_layout = QHBoxLayout(keys_group)
+        self.scaler.spacing(keys_layout, 8)
         
         self.backspace_key = QPushButton("⌫")
         self.backspace_key.setObjectName("specialKey")
@@ -269,8 +365,22 @@ class SerialTab(QWidget):
         self.tab_key.clicked.connect(lambda: self.send_special_key("Tab"))
         keys_layout.addWidget(self.tab_key)
         
+        # Add Del and Space keys
+        self.del_key = QPushButton("Del")
+        self.del_key.setObjectName("specialKey")
+        self.del_key.setToolTip("Delete")
+        self.del_key.clicked.connect(lambda: self.send_special_key("Delete"))
+        keys_layout.addWidget(self.del_key)
+        
+        self.space_key = QPushButton("Space")
+        self.space_key.setObjectName("specialKey")
+        self.space_key.clicked.connect(lambda: self.send_special_key("Space"))
+        keys_layout.addWidget(self.space_key)
+        
+        controls_layout.addWidget(keys_group, 1)
+        
         # Toggle switches section
-        toggle_group = QWidget()
+        toggle_group = QGroupBox("Display Options")
         toggle_group.setObjectName("toggleGroup")
         toggle_layout = QHBoxLayout(toggle_group)
         
@@ -305,18 +415,87 @@ class SerialTab(QWidget):
         self.clear_all_button.clicked.connect(self.clear_all_displays)
         toggle_layout.addWidget(self.clear_all_button)
         
-        controls_layout.addWidget(keys_group, 3)
         controls_layout.addWidget(toggle_group, 2)
         
         bottom_layout.addWidget(controls_panel)
         
-        serial_layout.addWidget(bottom_panel, 1)
+        # Add the bottom panel to main splitter
+        main_splitter.addWidget(bottom_panel)
+        
+        # Set initial sizes for main splitter sections - maximize central display area
+        main_splitter.setSizes([self.scaler.value(120), self.scaler.value(550), self.scaler.value(130)])
+        
+        # Add main splitter to layout
+        main_layout.addWidget(main_splitter)
+        
+        # Store command history
+        self.command_history = []
+        self.history_index = -1
+        
+        # Set up key press event for command history navigation
+        self.input_line.installEventFilter(self)
+    
+    def eventFilter(self, obj, event):
+        """Handle key events for command history navigation."""
+        from PyQt6.QtCore import QEvent
+        
+        if obj is self.input_line and event.type() == QEvent.Type.KeyPress:
+            # Use the event directly, it's already a QKeyEvent
+            
+            # Up arrow key - previous command
+            if event.key() == Qt.Key.Key_Up:
+                self.navigate_history(-1)
+                return True
+                
+            # Down arrow key - next command
+            elif event.key() == Qt.Key.Key_Down:
+                self.navigate_history(1)
+                return True
+                
+        # Pass event to parent class
+        return super().eventFilter(obj, event)
+    
+    def navigate_history(self, direction):
+        """Navigate through command history."""
+        if not self.command_history:
+            return
+            
+        new_index = self.history_index + direction
+        
+        if new_index < 0:
+            new_index = 0
+        elif new_index >= len(self.command_history):
+            new_index = len(self.command_history) - 1
+            
+        if new_index != self.history_index and 0 <= new_index < len(self.command_history):
+            self.history_index = new_index
+            self.input_line.setText(self.command_history[self.history_index])
+            # Place cursor at the end of text
+            self.input_line.setCursorPosition(len(self.input_line.text()))
+    
+    def show_command_history(self):
+        """Show command history in a popup dialog."""
+        if not self.command_history:
+            QMessageBox.information(self, "Command History", "No commands in history.")
+            return
+            
+        # Create a simple dialog to display history
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle("Command History")
+        dialog.setIcon(QMessageBox.Icon.Information)
+        
+        # Format history items
+        history_text = "Recent commands (newest first):\n\n"
+        for cmd in reversed(self.command_history[-20:]):  # Show last 20 commands
+            history_text += f"• {cmd}\n"
+            
+        dialog.setText(history_text)
+        dialog.exec()
     
     def setup_fonts(self):
         """Set up fonts with proper scaling."""
         # Define font stacks
         code_font = "JetBrains Mono, Fira Code, Source Code Pro, Consolas, Courier New"
-        ui_font = "Segoe UI, Roboto, Arial, sans-serif"
         
         # Create and configure a monospace font with scaled size
         monospace_font = QFont()
@@ -329,6 +508,111 @@ class SerialTab(QWidget):
         self.tx_display.setFont(monospace_font)
         self.input_line.setFont(monospace_font)
     
+    def setup_command_completer(self):
+        """Setup auto-completion for common commands."""
+        # Build a list of common commands from history or predefined list
+        common_commands = [
+            "AT", "AT+RESET", "AT+VERSION", "AT+INFO", "AT+STATUS",
+            "GET", "SET", "READ", "WRITE", "HELP", "ECHO", "REBOOT"
+        ]
+        
+        # Add commands from history if available
+        if self.command_history:
+            common_commands.extend(self.command_history)
+            # Remove duplicates while preserving order
+            common_commands = list(dict.fromkeys(common_commands))
+        
+        # Create and configure completer
+        completer = QCompleter(common_commands)
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        self.input_line.setCompleter(completer)
+    
+    def add_command_templates(self):
+        """Add common command templates feature."""
+        # Create a drop-down for quick command templates
+        templates_layout = QHBoxLayout()
+        
+        templates_label = QLabel("Templates:")
+        templates_layout.addWidget(templates_label)
+        
+        self.templates_combo = QComboBox()
+        self.templates_combo.addItem("-- Select Template --")
+        
+        # Add common command templates for various devices
+        common_templates = {
+            "AT Commands": ["AT", "AT+RST", "AT+GMR", "AT+CWLAP", "AT+CWJAP?"],
+            "Network": ["ping 8.8.8.8", "ifconfig", "ipconfig", "netstat"],
+            "Custom": []  # User can add custom templates
+        }
+        
+        # Add to combo box
+        for category, commands in common_templates.items():
+            self.templates_combo.addItem(f"--- {category} ---")
+            for cmd in commands:
+                self.templates_combo.addItem(cmd)
+        
+        # Connect signal
+        self.templates_combo.currentTextChanged.connect(self.apply_template)
+        templates_layout.addWidget(self.templates_combo, 1)
+        
+        # Add button to save current command as template
+        save_template_btn = QPushButton("+")
+        save_template_btn.setToolTip("Save current command as template")
+        save_template_btn.setFixedSize(self.scaler.value(30), self.scaler.value(30))
+        save_template_btn.clicked.connect(self.save_as_template)
+        templates_layout.addWidget(save_template_btn)
+        
+        return templates_layout
+
+    def apply_template(self, template):
+        """Apply selected command template to input line."""
+        if (template != "-- Select Template --" and 
+            not template.startswith("--- ") and 
+            not template.endswith(" ---")):
+            self.input_line.setText(template)
+            self.input_line.setFocus()
+            # Reset selection after applying
+            self.templates_combo.setCurrentIndex(0)
+
+    def save_as_template(self):
+        """Save current command as a template."""
+        current_text = self.input_line.text().strip()
+        if not current_text:
+            return
+            
+        # Prompt for category
+        categories = ["Custom", "AT Commands", "Network", "New Category..."]
+        category, ok = QInputDialog.getItem(
+            self, "Save Template", 
+            "Select category:", categories, 0, False
+        )
+        
+        if not ok:
+            return
+            
+        # Handle new category
+        if category == "New Category...":
+            category, ok = QInputDialog.getText(
+                self, "New Category", "Enter category name:"
+            )
+            if not ok or not category:
+                return
+        
+        # Add to templates combo box
+        # In a real implementation, you'd save this to a configuration file
+        if current_text not in [self.templates_combo.itemText(i) 
+                              for i in range(self.templates_combo.count())]:
+            # Add category header if it doesn't exist
+            cat_text = f"--- {category} ---"
+            if cat_text not in [self.templates_combo.itemText(i) 
+                              for i in range(self.templates_combo.count())]:
+                self.templates_combo.addItem(cat_text)
+                
+            # Add the template
+            self.templates_combo.addItem(current_text)
+            self.status_message.emit(f"Added template: {current_text}", 0)
+    
     def update_port_list(self):
         """Update the list of available serial ports."""
         import serial.tools.list_ports
@@ -337,14 +621,17 @@ class SerialTab(QWidget):
         self.port_combo.clear()
         ports = serial.tools.list_ports.comports()
         for port in ports:
-            self.port_combo.addItem(port.device)
+            # Add port with description for better user information
+            display_text = f"{port.device} ({port.description})"
+            self.port_combo.addItem(display_text, port.device)
         
         # Restore previous selection if it still exists
-        index = self.port_combo.findText(current_port)
-        if index >= 0:
-            self.port_combo.setCurrentIndex(index)
+        for i in range(self.port_combo.count()):
+            if self.port_combo.itemData(i) == current_port:
+                self.port_combo.setCurrentIndex(i)
+                break
         
-        self.status_message.emit(f"Found {len(ports)} serial ports", 0)
+        self.status_message.emit(f"Found {len(ports)} serial ports", 3000)
         
     def update_monitor(self):
         """Update serial monitor settings based on current UI selections."""
@@ -354,7 +641,8 @@ class SerialTab(QWidget):
                 self.serial_thread.quit()
                 self.serial_thread.wait()
         
-        port = self.port_combo.currentText()
+        # Get actual port from currentData (not display text)
+        port = self.port_combo.currentData()
         baudrate = int(self.baud_combo.currentText())
         if port:
             # Pass auto_termination state to new monitor instance
@@ -368,6 +656,13 @@ class SerialTab(QWidget):
                 timestamp=self.timestamp_toggle.isChecked(),
                 auto_termination=auto_term
             )
+            
+            # Initialize statistics
+            self.monitor.stats = {
+                'rx_bytes': 0,
+                'tx_bytes': 0
+            }
+            
             self.setup_serial_thread()
             self.update_status()
     
@@ -380,10 +675,14 @@ class SerialTab(QWidget):
             self.monitor.stop()
             self.connect_button.setText("CONNECT")
             self.connect_button.setChecked(False)
+            self.connection_status.setText("Status: Disconnected")
+            self.connection_status.setStyleSheet(f"color: {COLORS['status_disconnected']};")
         else:
             if self.monitor and self.monitor.start():
                 self.connect_button.setText("DISCONNECT")
                 self.connect_button.setChecked(True)
+                self.connection_status.setText("Status: Connected")
+                self.connection_status.setStyleSheet(f"color: {COLORS['status_connected']};")
         self.update_status()
     
     def setup_serial_thread(self):
@@ -395,6 +694,22 @@ class SerialTab(QWidget):
     
     def update_rx_display(self, text):
         """Update the RX display with received data."""
+        # Update byte count for statistics
+        self.rx_bytes += len(text)
+        if hasattr(self.monitor, 'stats'):
+            self.monitor.stats['rx_bytes'] = self.rx_bytes
+        
+        # Apply filtering if enabled
+        if hasattr(self, 'filter_rx_toggle') and self.filter_rx_toggle.isChecked():
+            # Simple filter: only show printable ASCII and common control chars
+            filtered_text = ""
+            for c in text:
+                if 32 <= ord(c) <= 126 or c in '\r\n\t':
+                    filtered_text += c
+                else:
+                    filtered_text += f"[{ord(c):02X}]"
+            text = filtered_text
+        
         if self.monitor.hex_display:
             text = ' '.join(f'{ord(c):02X}' for c in text)
         if self.monitor.timestamp:
@@ -402,14 +717,14 @@ class SerialTab(QWidget):
 
         cursor = self.rx_display.textCursor()
         format = QTextCharFormat()
-        format.setForeground(QColor("#7EC7A2"))  # Green for RX
+        format.setForeground(QColor(COLORS["rx_text"]))
         cursor.setCharFormat(format)
         cursor.insertText(f"[RX] {text}\n")
         self.rx_display.setTextCursor(cursor)
         self.rx_display.ensureCursorVisible()
     
     def send_data(self):
-        """Send data to the serial port."""
+        """Send data to the serial port with visual feedback."""
         if not self.monitor or not self.monitor.ser or not self.monitor.ser.is_open:
             self.handle_error("Not connected")
             return
@@ -420,8 +735,36 @@ class SerialTab(QWidget):
             
         text = self.input_line.text().strip()
         if text:
+            # Save to command history
+            if not self.command_history or self.command_history[-1] != text:
+                self.command_history.append(text)
+                self.history_index = len(self.command_history)
+                
+                # Update completer
+                self.setup_command_completer()
+            
+            # Visual feedback - briefly disable the input and change button appearance
+            self.input_line.setEnabled(False)
+            self.send_button.setText("Sending...")
+            self.send_button.setStyleSheet(f"""
+                background-color: {COLORS["status_alert"]};
+                color: white;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-weight: bold;
+            """)
+            
+            # Use a timer to restore the UI after a short delay
+            QTimer.singleShot(150, self.restore_send_ui)
+            
+            # Continue with data sending
             sent_data = self.monitor.send_data(text)
             if sent_data:
+                # Update byte count for statistics
+                self.tx_bytes += len(sent_data)
+                if hasattr(self.monitor, 'stats'):
+                    self.monitor.stats['tx_bytes'] = self.tx_bytes
+                
                 display_text = text
                 if self.monitor.hex_display:
                     display_text = ' '.join(f'{b:02X}' for b in sent_data)
@@ -430,12 +773,21 @@ class SerialTab(QWidget):
 
                 cursor = self.tx_display.textCursor()
                 format = QTextCharFormat()
-                format.setForeground(QColor("#61afef"))  # Blue for TX
+                format.setForeground(QColor(COLORS["tx_text"]))
                 cursor.setCharFormat(format)
                 cursor.insertText(f"[TX] {display_text}\n")
                 self.tx_display.setTextCursor(cursor)
                 self.tx_display.ensureCursorVisible()
             self.input_line.clear()
+    
+    def restore_send_ui(self):
+        """Restore UI after send operation."""
+        self.input_line.setEnabled(True)
+        self.input_line.setFocus()
+        self.send_button.setText("Send")
+        
+        # Restore original styling by removing the inline style
+        self.send_button.setStyleSheet("")
     
     def send_special_key(self, key):
         """Send a special key directly to the serial connection."""
@@ -447,12 +799,37 @@ class SerialTab(QWidget):
         if self.auto_clear_rx:
             self.clear_rx_display()
             
+        # Visual feedback for key press
+        button = None
+        if key == "Enter":
+            button = self.enter_key
+        elif key == "Escape":
+            button = self.esc_key
+        elif key == "Backspace":
+            button = self.backspace_key
+        elif key == "Tab":
+            button = self.tab_key
+        elif key == "Delete":
+            button = self.del_key
+        elif key == "Space":
+            button = self.space_key
+            
+        if button:
+            original_style = button.styleSheet()
+            button.setStyleSheet(f"background-color: {COLORS['special_key_hover']}; color: white;")
+            QTimer.singleShot(150, lambda: button.setStyleSheet(original_style))
+            
         sent_data = self.monitor.send_key(key)
         if sent_data:
+            # Update byte count for statistics
+            self.tx_bytes += len(sent_data)
+            if hasattr(self.monitor, 'stats'):
+                self.monitor.stats['tx_bytes'] = self.tx_bytes
+            
             # Display the key press in the TX display
             cursor = self.tx_display.textCursor()
             format = QTextCharFormat()
-            format.setForeground(QColor("#61afef"))  # Blue for TX
+            format.setForeground(QColor(COLORS["tx_text"]))
             cursor.setCharFormat(format)
             cursor.insertText(f"[KEY] {key}\n")
             self.tx_display.setTextCursor(cursor)
@@ -464,8 +841,10 @@ class SerialTab(QWidget):
             self.monitor.timestamp = not self.monitor.timestamp
             if self.monitor.timestamp:
                 self.timestamp_toggle.setChecked(True)
+                self.status_message.emit("Timestamp display: ON", 3000)
             else:
                 self.timestamp_toggle.setChecked(False)
+                self.status_message.emit("Timestamp display: OFF", 3000)
     
     def toggle_hex(self):
         """Toggle hex display mode."""
@@ -473,8 +852,10 @@ class SerialTab(QWidget):
             self.monitor.hex_display = not self.monitor.hex_display
             if self.monitor.hex_display:
                 self.hex_toggle.setChecked(True)
+                self.status_message.emit("HEX display mode: ON", 3000)
             else:
                 self.hex_toggle.setChecked(False)
+                self.status_message.emit("HEX display mode: OFF", 3000)
     
     def toggle_raw_mode(self):
         """Toggle raw mode (whether termination chars are auto-added)."""
@@ -482,43 +863,48 @@ class SerialTab(QWidget):
             self.monitor.auto_termination = not self.monitor.auto_termination
             if self.monitor.auto_termination:
                 self.raw_mode_toggle.setChecked(True)
+                self.status_message.emit("Auto-termination: ON", 3000)
             else:
                 self.raw_mode_toggle.setChecked(False)
-                
-            # Update status to show the change
-            mode_text = "with auto termination" if self.monitor.auto_termination else "in raw mode"
-            self.status_message.emit(f"Serial now operating {mode_text}", 0)
+                self.status_message.emit("Auto-termination: OFF (Raw Mode)", 3000)
     
     def toggle_auto_clear(self):
         """Toggle auto-clear of RX display on new command."""
         self.auto_clear_rx = not self.auto_clear_rx
         if self.auto_clear_rx:
             self.auto_clear_toggle.setChecked(True)
-            self.status_message.emit("Auto-clear RX on command: ENABLED", 0)
+            self.status_message.emit("Auto-clear RX on command: ENABLED", 3000)
         else:
             self.auto_clear_toggle.setChecked(False)
-            self.status_message.emit("Auto-clear RX on command: DISABLED", 0)
+            self.status_message.emit("Auto-clear RX on command: DISABLED", 3000)
+    
+    def toggle_rx_filter(self):
+        """Toggle filtering of non-printable characters in RX display."""
+        if self.filter_rx_toggle.isChecked():
+            self.status_message.emit("RX filtering: ENABLED", 3000)
+        else:
+            self.status_message.emit("RX filtering: DISABLED", 3000)
     
     def clear_rx_display(self):
         """Clear the RX display window."""
         self.rx_display.clear()
-        self.status_message.emit("RX display cleared", 0)
+        self.status_message.emit("RX display cleared", 3000)
     
     def clear_tx_display(self):
         """Clear the TX display window."""
         self.tx_display.clear()
-        self.status_message.emit("TX display cleared", 0)
+        self.status_message.emit("TX display cleared", 3000)
     
     def clear_all_displays(self):
         """Clear both RX and TX display windows."""
         self.rx_display.clear()
         self.tx_display.clear()
-        self.status_message.emit("All displays cleared", 0)
+        self.status_message.emit("All displays cleared", 3000)
     
     def update_status(self):
         """Update connection status in parent window."""
         # Emit status to parent window
-        port = self.port_combo.currentText() or "N/A"
+        port = self.port_combo.currentData() or "N/A"
         baud = self.baud_combo.currentText()
         status = "ONLINE" if self.monitor and self.monitor.ser and self.monitor.ser.is_open else "OFFLINE"
         
@@ -526,9 +912,13 @@ class SerialTab(QWidget):
         if status == "ONLINE":
             self.connect_button.setText("DISCONNECT")
             self.connect_button.setChecked(True)
+            self.connection_status.setText("Status: Connected")
+            self.connection_status.setStyleSheet(f"color: {COLORS['status_connected']};")
         else:
             self.connect_button.setText("CONNECT")
             self.connect_button.setChecked(False)
+            self.connection_status.setText("Status: Disconnected")
+            self.connection_status.setStyleSheet(f"color: {COLORS['status_disconnected']};")
         
         # Emit connection info to parent
         self.status_message.emit(f"PORT: {port} | BAUD: {baud} | STATUS: {status}", 0)
@@ -541,11 +931,59 @@ class SerialTab(QWidget):
         cursor = self.rx_display.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         format = QTextCharFormat()
-        format.setForeground(QColor("#e06c75"))  # Red for errors
+        format.setForeground(QColor(COLORS["error_text"]))
         cursor.setCharFormat(format)
         cursor.insertText(f"[ERROR] {message}\n")
         self.rx_display.setTextCursor(cursor)
         self.rx_display.ensureCursorVisible()
+        
+        # Provide visual feedback
+        QTimer.singleShot(100, lambda: self.flash_error_indicator(message))
+    
+    def flash_error_indicator(self, message):
+        """Flash an error message in the status bar."""
+        # This is just a placeholder - in a real implementation, 
+        # you might create a temporary overlay or animation
+        self.status_message.emit(f"ERROR: {message}", 5000)
+        
+        # Restore UI if needed
+        if not self.input_line.isEnabled():
+            self.restore_send_ui()
+    
+    def update_stats(self):
+        """Update RX/TX statistics display."""
+        # Calculate data rates
+        now = datetime.now()
+        time_diff = (now - self.last_time).total_seconds()
+        
+        if time_diff > 0:
+            # RX rate
+            rx_diff = self.rx_bytes - self.last_rx
+            rx_rate = rx_diff / time_diff
+            
+            # TX rate
+            tx_diff = self.tx_bytes - self.last_tx
+            tx_rate = tx_diff / time_diff
+            
+            # Format for display
+            if rx_rate < 1024:
+                rx_rate_str = f"{rx_rate:.1f} B/s"
+            else:
+                rx_rate_str = f"{rx_rate/1024:.1f} KB/s"
+                
+            if tx_rate < 1024:
+                tx_rate_str = f"{tx_rate:.1f} B/s"
+            else:
+                tx_rate_str = f"{tx_rate/1024:.1f} KB/s"
+            
+            # Update labels with improved formatting
+            self.rx_stats_label.setText(f"{rx_rate_str} ({self.rx_bytes} bytes total)")
+            self.tx_stats_label.setText(f"{tx_rate_str} ({self.tx_bytes} bytes total)")
+            
+            # Store values for next calculation
+            self.last_rx = self.rx_bytes
+            self.last_tx = self.tx_bytes
+            self.last_time = now
     
     def update_sequence_combo(self):
         """Update the sequence combo box with current sequences."""
@@ -610,7 +1048,7 @@ class SerialTab(QWidget):
             self.command_sequences[name] = sequence
             self.update_sequence_combo()
             self.sequence_combo.setCurrentText(name)
-            self.status_message.emit(f"Saved sequence: {name}", 0)
+            self.status_message.emit(f"Saved sequence: {name}", 3000)
     
     def delete_selected_sequence(self):
         """Delete the currently selected sequence."""
@@ -635,7 +1073,38 @@ class SerialTab(QWidget):
                     os.remove(filename)
                 
                 self.update_sequence_combo()
-                self.status_message.emit(f"Deleted sequence: {name}", 0)
+                self.status_message.emit(f"Deleted sequence: {name}", 3000)
+    
+    def export_sequences(self):
+        """Export all command sequences to a JSON file."""
+        if not self.command_sequences:
+            self.status_message.emit("No sequences to export", 3000)
+            return
+            
+        # Ask for file location
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Export All Sequences", "", "JSON Files (*.json);;All Files (*)"
+        )
+        
+        if not file_path:
+            return
+            
+        # Ensure file has .json extension
+        if not file_path.lower().endswith('.json'):
+            file_path += '.json'
+            
+        try:
+            # Export all sequences in one file
+            export_data = {}
+            for name, sequence in self.command_sequences.items():
+                export_data[name] = sequence.to_dict()
+                
+            with open(file_path, 'w') as f:
+                json.dump(export_data, f, indent=2)
+                
+            self.status_message.emit(f"Exported {len(export_data)} sequences to {file_path}", 3000)
+        except Exception as e:
+            self.error_occurred.emit(f"Error exporting sequences: {str(e)}")
     
     def run_selected_sequence(self):
         """Run the currently selected command sequence."""
@@ -648,6 +1117,11 @@ class SerialTab(QWidget):
             # Store as current sequence
             self.current_sequence = sequence
             
+            # Visual feedback
+            self.status_message.emit(f"Running sequence: {name}", 3000)
+            self.run_sequence_button.setText("▶ Running...")
+            self.run_sequence_button.setEnabled(False)
+            
             # Start execution
             self.execute_next_sequence_step()
     
@@ -659,15 +1133,17 @@ class SerialTab(QWidget):
         # Get next command
         cmd_info = self.current_sequence.get_next_command()
         if not cmd_info:
-            self.status_message.emit(f"Sequence '{self.current_sequence.name}' completed", 0)
+            self.status_message.emit(f"Sequence '{self.current_sequence.name}' completed", 3000)
             self.current_sequence = None
+            self.run_sequence_button.setText("▶ Run")
+            self.run_sequence_button.setEnabled(True)
             return
         
         # Send the command
         command = cmd_info['command']
         
         # Show what we're doing
-        self.status_message.emit(f"Sending: {command}", 0)
+        self.status_message.emit(f"Sending: {command}", 1000)
         
         # Clear RX display if auto-clear is enabled
         if self.auto_clear_rx:

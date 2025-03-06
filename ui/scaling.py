@@ -47,7 +47,7 @@ class UIScaler:
         
         # Calculate scale factor based on resolution and DPI
         # For screens smaller than 1280x720, scale down the UI
-        base_scale = min(0.8, min(screen_width / 1280, screen_height / 720))
+        base_scale = min(1, min(screen_width / 1280, screen_height / 720))
         
         # Additionally consider DPI for high-DPI screens
         dpi_scale = logical_dpi / 96.0  # 96 DPI is a common baseline
