@@ -19,9 +19,21 @@ class UIScaler:
         self.parent = parent_widget
         self.scale_factor = self.calculate_scale_factor()
         
-        # Define font stacks for the application
-        self.code_font = "JetBrains Mono, Fira Code, Source Code Pro, Consolas, Courier New"
-        self.ui_font = "Segoe UI, Roboto, Arial, sans-serif"
+        # Define font families for the application
+        self.code_font = "Consolas"
+        self.ui_font = "Segoe UI"
+        
+        # Define consistent spacing standards
+        self.SPACING_SMALL = 4
+        self.SPACING_MEDIUM = 8
+        self.SPACING_LARGE = 12
+        self.SPACING_SECTION = 16
+        
+        # Define consistent font sizes
+        self.FONT_SIZE_SMALL = 8
+        self.FONT_SIZE_MEDIUM = 9
+        self.FONT_SIZE_LARGE = 11
+        self.FONT_SIZE_CODE = 11
     
     def calculate_scale_factor(self):
         """
@@ -131,3 +143,40 @@ class UIScaler:
             spacing: Original spacing value
         """
         layout.setSpacing(self.value(spacing))
+    
+    def get_code_font(self, size=None):
+        """
+        Get a properly configured code font.
+        
+        Args:
+            size: Font size (uses FONT_SIZE_CODE if None)
+            
+        Returns:
+            QFont: Configured code font
+        """
+        from PyQt6.QtGui import QFont
+        font = QFont()
+        font.setFamily(self.code_font)
+        font.setPointSize(self.value(size or self.FONT_SIZE_CODE))
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        return font
+    
+    def get_ui_font(self, size=None, weight=None):
+        """
+        Get a properly configured UI font.
+        
+        Args:
+            size: Font size (uses FONT_SIZE_MEDIUM if None)
+            weight: Font weight (QFont.Weight enum)
+            
+        Returns:
+            QFont: Configured UI font
+        """
+        from PyQt6.QtGui import QFont
+        font = QFont()
+        font.setFamily(self.ui_font)
+        font.setPointSize(self.value(size or self.FONT_SIZE_MEDIUM))
+        if weight:
+            font.setWeight(weight)
+        return font
+    

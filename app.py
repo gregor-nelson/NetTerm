@@ -10,23 +10,17 @@ import sys
 from PyQt6.QtWidgets import QApplication
 
 from ui.main_window import NetworkToolsWindow
-from theme_config import get_scaled_stylesheet
 
 
 def main():
     """Main application entry point."""
     app = QApplication(sys.argv)
     
+    # Set the application style to Fusion for consistent cross-platform theming
+    app.setStyle('Fusion')
+    
     # Create main window
     window = NetworkToolsWindow()
-    
-    # Get and apply the theme
-    stylesheet = get_scaled_stylesheet(
-        scale_factor=window.ui_scaler.scale_factor,
-        code_font=window.ui_scaler.code_font,
-        ui_font=window.ui_scaler.ui_font
-    )
-    window.apply_theme(stylesheet)
     
     # Show the window and start the application
     window.show()

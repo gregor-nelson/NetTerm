@@ -8,18 +8,19 @@ from PyQt6.QtWidgets import (QPushButton, QLineEdit, QLabel, QGroupBox,
                            QVBoxLayout, QHBoxLayout, QDialog, QMessageBox,
                            QTextEdit, QFileDialog, QComboBox, QWidget,
                            QProgressBar)
-from PyQt6.QtGui import QIcon, QFont, QColor, QTextCursor, QTextCharFormat
+from PyQt6.QtGui import QIcon, QFont, QTextCursor, QTextCharFormat
 
 
 class StyledButton(QPushButton):
     """Button with consistent styling and optional icon support."""
     
-    def __init__(self, text, icon=None, accent=False, destructive=False, parent=None):
+    def __init__(self, text, scaler, icon=None, accent=False, destructive=False, parent=None):
         """
         Initialize a styled button.
         
         Args:
             text: Button text
+            scaler: UIScaler instance for consistent sizing
             icon: Optional icon name (without extension)
             accent: Whether this is an accent (primary) button
             destructive: Whether this is a destructive action button
@@ -27,8 +28,13 @@ class StyledButton(QPushButton):
         """
         super().__init__(text, parent)
         
-        self.setObjectName("accentButton" if accent else 
-                          "destructiveButton" if destructive else "")
+        # Apply consistent font and sizing
+        if accent:
+            self.setFont(scaler.get_ui_font(scaler.FONT_SIZE_MEDIUM, weight=QFont.Weight.Bold))
+            self.setMinimumHeight(scaler.value(36))
+        else:
+            self.setFont(scaler.get_ui_font(scaler.FONT_SIZE_MEDIUM))
+            self.setMinimumHeight(scaler.value(32))
         
         if icon:
             self.setIcon(QIcon(f"icons/{icon}.png"))
@@ -37,12 +43,13 @@ class StyledButton(QPushButton):
 class LabeledInput(QGroupBox):
     """Input field with a label for form layouts."""
     
-    def __init__(self, label_text, placeholder="", parent=None):
+    def __init__(self, label_text, scaler, placeholder="", parent=None):
         """
         Initialize a labeled input.
         
         Args:
             label_text: Label text
+            scaler: UIScaler instance for consistent sizing
             placeholder: Input placeholder text
             parent: Parent widget
         """
@@ -51,12 +58,14 @@ class LabeledInput(QGroupBox):
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        scaler.spacing(layout, scaler.SPACING_SMALL)
         
         self.label = QLabel(label_text)
-        self.label.setObjectName("formLabel")
+        self.label.setFont(scaler.get_ui_font(scaler.FONT_SIZE_SMALL))
         
         self.input = QLineEdit()
+        self.input.setFont(scaler.get_ui_font(scaler.FONT_SIZE_MEDIUM))
+        self.input.setMinimumHeight(scaler.value(28))
         self.input.setPlaceholderText(placeholder)
         
         layout.addWidget(self.label)
@@ -74,21 +83,16 @@ class LabeledInput(QGroupBox):
 class StatusIndicator(QLabel):
     """Status indicator with colored text based on status."""
     
-    STATUS_COLORS = {
-        "online": "#7EC7A2",  # Green
-        "offline": "#e06c75",  # Red
-        "warning": "#EBCB8B",  # Yellow
-        "default": "#abb2bf"   # Light gray
-    }
-    
-    def __init__(self, parent=None):
+    def __init__(self, scaler, parent=None):
         """
         Initialize a status indicator.
         
         Args:
+            scaler: UIScaler instance for consistent sizing
             parent: Parent widget
         """
         super().__init__(parent)
+        self.setFont(scaler.get_ui_font(scaler.FONT_SIZE_MEDIUM))
         self.setStatus("default", "Status")
     
     def setStatus(self, status_type, text):
@@ -99,9 +103,8 @@ class StatusIndicator(QLabel):
             status_type: Status type (online, offline, warning, default)
             text: Status text
         """
-        color = self.STATUS_COLORS.get(status_type.lower(), self.STATUS_COLORS["default"])
+        # Use default styling from Fusion theme
         self.setText(text)
-        self.setStyleSheet(f"color: {color}; font-weight: bold;")
 
 
 class ProgressDialog(QDialog):
@@ -109,32 +112,41 @@ class ProgressDialog(QDialog):
     
     canceled = pyqtSignal()
     
-    def __init__(self, title, message, parent=None):
+    def __init__(self, title, message, scaler, parent=None):
         """
         Initialize a progress dialog.
         
         Args:
             title: Dialog title
             message: Progress message
+            scaler: UIScaler instance for consistent sizing
             parent: Parent widget
         """
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(scaler.value(400))
         
         layout = QVBoxLayout(self)
+        scaler.spacing(layout, scaler.SPACING_MEDIUM)
+        scaler.margins(layout, scaler.SPACING_LARGE, scaler.SPACING_LARGE, scaler.SPACING_LARGE, scaler.SPACING_LARGE)
         
         self.message_label = QLabel(message)
+        self.message_label.setFont(scaler.get_ui_font(scaler.FONT_SIZE_MEDIUM))
         layout.addWidget(self.message_label)
         
         from PyQt6.QtWidgets import QProgressBar
         self.progress_bar = QProgressBar()
+        self.progress_bar.setFont(scaler.get_ui_font(scaler.FONT_SIZE_SMALL))
+        self.progress_bar.setMinimumHeight(scaler.value(24))
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         layout.addWidget(self.progress_bar)
         
         button_layout = QHBoxLayout()
+        scaler.spacing(button_layout, scaler.SPACING_SMALL)
         self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.setFont(scaler.get_ui_font(scaler.FONT_SIZE_MEDIUM))
+        self.cancel_button.setMinimumHeight(scaler.value(32))
         self.cancel_button.clicked.connect(self.on_cancel)
         button_layout.addStretch()
         button_layout.addWidget(self.cancel_button)
@@ -168,20 +180,19 @@ class ProgressDialog(QDialog):
 class LogDisplay(QTextEdit):
     """Text display for logging with colored text support."""
     
-    def __init__(self, parent=None):
+    def __init__(self, scaler, parent=None):
         """
         Initialize a log display.
         
         Args:
+            scaler: UIScaler instance for consistent sizing
             parent: Parent widget
         """
         super().__init__(parent)
         self.setReadOnly(True)
         
-        # Set monospace font
-        font = QFont("Consolas, Menlo, Courier, monospace")
-        font.setStyleHint(QFont.StyleHint.Monospace)
-        self.setFont(font)
+        # Set consistent monospace font
+        self.setFont(scaler.get_code_font())
     
     def appendLog(self, text, log_type="info"):
         """
@@ -191,22 +202,8 @@ class LogDisplay(QTextEdit):
             text: Log text
             log_type: Log type (info, error, warning, success)
         """
-        # Define colors for different log types
-        colors = {
-            "info": QColor("#abb2bf"),     # Light gray
-            "error": QColor("#e06c75"),    # Red
-            "warning": QColor("#EBCB8B"),  # Yellow
-            "success": QColor("#7EC7A2"),  # Green
-            "rx": QColor("#7EC7A2"),       # Green for received data
-            "tx": QColor("#61afef")        # Blue for transmitted data
-        }
-        
-        # Get appropriate color
-        color = colors.get(log_type.lower(), colors["info"])
-        
-        # Create text format with color
+        # Use default text formatting from Fusion theme
         format = QTextCharFormat()
-        format.setForeground(color)
         
         # Add timestamp if not a data message
         from datetime import datetime
@@ -246,15 +243,18 @@ class LogDisplay(QTextEdit):
 class PortSelector(QComboBox):
     """Combo box specifically for selecting serial ports."""
     
-    def __init__(self, parent=None):
+    def __init__(self, scaler, parent=None):
         """
         Initialize a port selector.
         
         Args:
+            scaler: UIScaler instance for consistent sizing
             parent: Parent widget
         """
         super().__init__(parent)
-        self.setMinimumWidth(150)
+        self.setFont(scaler.get_ui_font(scaler.FONT_SIZE_MEDIUM))
+        self.setMinimumWidth(scaler.value(150))
+        self.setMinimumHeight(scaler.value(28))
         self.refresh()
     
     def refresh(self):
@@ -283,11 +283,12 @@ class FileSelector(QWidget):
     
     fileSelected = pyqtSignal(str)
     
-    def __init__(self, label="File:", filter="All Files (*.*)", parent=None):
+    def __init__(self, scaler, label="File:", filter="All Files (*.*)", parent=None):
         """
         Initialize a file selector.
         
         Args:
+            scaler: UIScaler instance for consistent sizing
             label: Label text
             filter: File filter string
             parent: Parent widget
@@ -296,10 +297,18 @@ class FileSelector(QWidget):
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        scaler.spacing(layout, scaler.SPACING_SMALL)
         
         self.label = QLabel(label)
+        self.label.setFont(scaler.get_ui_font(scaler.FONT_SIZE_SMALL))
+        
         self.path_input = QLineEdit()
+        self.path_input.setFont(scaler.get_code_font())
+        self.path_input.setMinimumHeight(scaler.value(28))
+        
         self.browse_button = QPushButton("Browse...")
+        self.browse_button.setFont(scaler.get_ui_font(scaler.FONT_SIZE_MEDIUM))
+        self.browse_button.setMinimumHeight(scaler.value(28))
         
         layout.addWidget(self.label)
         layout.addWidget(self.path_input, 1)  # Give input stretch priority

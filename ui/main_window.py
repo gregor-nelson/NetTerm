@@ -58,9 +58,9 @@ class NetworkToolsWindow(QMainWindow):
         self.setCentralWidget(main_widget)
         main_layout = QVBoxLayout(main_widget)
         
-        # Scale margins and spacing
-        self.ui_scaler.spacing(main_layout, 10)
-        self.ui_scaler.margins(main_layout, 15, 15, 15, 15)
+        # Apply consistent spacing standards
+        self.ui_scaler.spacing(main_layout, 8)  # Medium spacing
+        self.ui_scaler.margins(main_layout, 12, 12, 12, 12)  # Medium margins
         
         # Create tab widget
         self.tabs = QTabWidget()
@@ -78,16 +78,23 @@ class NetworkToolsWindow(QMainWindow):
         self.ping_tab.status_message.connect(self.show_status_message)
         self.ping_tab.error_occurred.connect(self.show_error)
         
-        # Add tabs
+        # Add tabs with consistent styling
         self.tabs.addTab(self.serial_tab, "Serial Monitor")
-        self.tabs.addTab(self.serial_port_scanner_tab, "Serial Port Scanner")  # Add new tab
+        self.tabs.addTab(self.serial_port_scanner_tab, "Serial Port Scanner")
         self.tabs.addTab(self.ping_tab, "Ping Scanner")
+        
+        # Apply consistent tab widget font
+        from PyQt6.QtGui import QFont
+        ui_font = QFont(self.ui_scaler.ui_font)
+        ui_font.setPointSize(self.ui_scaler.value(9))
+        self.tabs.setFont(ui_font)
         
         main_layout.addWidget(self.tabs)
         
-        # Status Bar
+        # Status Bar with consistent font
         self.status_bar = QStatusBar()
-        self.status_bar.setObjectName("statusBar")
+        status_font = self.ui_scaler.get_ui_font(self.ui_scaler.FONT_SIZE_SMALL)
+        self.status_bar.setFont(status_font)
         self.setStatusBar(self.status_bar)
     
     def show_status_message(self, message, timeout=3000):
@@ -98,9 +105,6 @@ class NetworkToolsWindow(QMainWindow):
         """Show an error message in the status bar."""
         self.status_bar.showMessage(f"ERROR: {message}", 5000)
     
-    def apply_theme(self, stylesheet):
-        """Apply theme stylesheet to the application."""
-        self.setStyleSheet(stylesheet)
     
     def closeEvent(self, event):
         """Handle application close event."""

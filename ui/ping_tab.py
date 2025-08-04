@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTabl
                            QFileDialog, QMenu, QTabWidget, QTextEdit, QDialog,
                            QDialogButtonBox)
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QPoint, QTimer, QMutex, QMutexLocker
-from PyQt6.QtGui import QColor, QTextCursor, QFont, QAction
+from PyQt6.QtGui import QTextCursor, QFont, QAction
 
 from core.ping_scanner import (PingWorker, get_ip_range, COMMON_PORTS, 
                               ScanProfile, export_scan_results, PRIORITY_PORTS,
@@ -76,7 +76,7 @@ class DetailedResultsDialog(QDialog):
         # Create text edit for details
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)
-        self.text_edit.setFont(QFont("Consolas", 10))
+        self.text_edit.setFont(self.parent().scaler.get_code_font() if self.parent() else QFont("Consolas", 10))
         
         # Format the details
         info_text = self.format_details(ip, details)
@@ -198,12 +198,14 @@ class PingTab(QWidget):
     def init_ui(self):
         """Initialize the Ping Scanner tab UI."""
         ping_layout = QVBoxLayout(self)
-        self.scaler.spacing(ping_layout, 10)
-        self.scaler.margins(ping_layout, 10, 10, 10, 10)
+        self.scaler.spacing(ping_layout, self.scaler.SPACING_MEDIUM)
+        self.scaler.margins(ping_layout, self.scaler.SPACING_LARGE, self.scaler.SPACING_LARGE, self.scaler.SPACING_LARGE, self.scaler.SPACING_LARGE)
         
         # Create tabbed widget for Network Adapters and Scan Results
         self.main_tabs = QTabWidget()
-        self.main_tabs.setObjectName("mainTabs")
+        
+        # Apply consistent font to main tabs
+        self.main_tabs.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         
         # Create Network Adapters tab
         self.create_network_adapters_tab()
@@ -220,29 +222,29 @@ class PingTab(QWidget):
         
         # IP Range input section
         ip_range_group = QGroupBox("IP Range")
-        ip_range_group.setObjectName("connectionGroup")
+        ip_range_group.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         ip_range_layout = QVBoxLayout(ip_range_group)
+        self.scaler.spacing(ip_range_layout, self.scaler.SPACING_SMALL)
         
         # IP Range input
         ip_input_layout = QHBoxLayout()
         
         start_ip_label = QLabel("Start IP:")
-        start_ip_label.setObjectName("sectionLabel")
+        start_ip_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.start_ip_input = QLineEdit()
+        self.start_ip_input.setFont(self.scaler.get_code_font())
         self.start_ip_input.setPlaceholderText("192.168.1.1 or 192.168.1.0/24")
-        self.start_ip_input.setObjectName("commandInput")
         self.start_ip_input.textChanged.connect(self.validate_ip_input)
         
         end_ip_label = QLabel("End IP:")
-        end_ip_label.setObjectName("sectionLabel")
+        end_ip_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.end_ip_input = QLineEdit()
+        self.end_ip_input.setFont(self.scaler.get_code_font())
         self.end_ip_input.setPlaceholderText("192.168.1.254 or leave empty for single IP")
-        self.end_ip_input.setObjectName("commandInput")
         self.end_ip_input.textChanged.connect(self.validate_ip_input)
         
         self.ip_validation_label = QLabel("")
-        self.ip_validation_label.setObjectName("helpLabel")
-        self.ip_validation_label.setStyleSheet("color: #e06c75;")
+        self.ip_validation_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         
         ip_input_layout.addWidget(start_ip_label)
         ip_input_layout.addWidget(self.start_ip_input, 2)
@@ -257,27 +259,30 @@ class PingTab(QWidget):
         
         # Scan Profile
         profile_label = QLabel("Scan Profile:")
-        profile_label.setObjectName("sectionLabel")
+        profile_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.profile_combo = QComboBox()
+        self.profile_combo.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.profile_combo.addItems(["Quick Scan", "Detailed Scan", "Custom"])
         self.profile_combo.currentTextChanged.connect(self.on_profile_changed)
         
         # Timeout option
         timeout_label = QLabel("Timeout (ms):")
-        timeout_label.setObjectName("sectionLabel")
+        timeout_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.timeout_input = QSpinBox()
+        self.timeout_input.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.timeout_input.setRange(100, 10000)
         self.timeout_input.setValue(1000)
         self.timeout_input.setSingleStep(100)
-        self.timeout_input.setObjectName("commandInput")
         
         # Port Scan option
         self.port_scan_checkbox = QCheckBox("Scan Ports")
+        self.port_scan_checkbox.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.port_scan_checkbox.setChecked(False)
         self.port_scan_checkbox.toggled.connect(self.toggle_port_scan_options)
         
         # Port Range combobox
         self.port_range_combo = QComboBox()
+        self.port_range_combo.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.port_range_combo.setEnabled(False)
         for label in COMMON_PORTS:
             self.port_range_combo.addItem(label)
@@ -294,18 +299,24 @@ class PingTab(QWidget):
         
         # Scan button
         scan_button_layout = QHBoxLayout()
-        self.scan_button = QPushButton("SCAN NETWORK")
-        self.scan_button.setObjectName("connectButton")
+        self.scaler.spacing(scan_button_layout, self.scaler.SPACING_SMALL)
+        
+        self.scan_button = QPushButton("Scan Network")
+        self.scan_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM, weight=QFont.Weight.Bold))
         self.scan_button.clicked.connect(self.start_ping_scan)
         
-        self.stop_scan_button = QPushButton("STOP SCAN")
-        self.stop_scan_button.setObjectName("clearAllButton")
+        # Remove custom styling - use theme system
+        
+        self.stop_scan_button = QPushButton("Stop Scan")
+        self.stop_scan_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.stop_scan_button.clicked.connect(self.stop_ping_scan)
         self.stop_scan_button.setEnabled(False)
         
+        # Remove custom styling - use theme system
+        
         # Estimate time button
         self.estimate_button = QPushButton("Estimate Time")
-        self.estimate_button.setObjectName("actionButton")
+        self.estimate_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.estimate_button.clicked.connect(self.estimate_scan_time)
         
         scan_button_layout.addWidget(self.scan_button)
@@ -336,11 +347,11 @@ class PingTab(QWidget):
         self.port_scan_progress.setVisible(False)
         
         self.scan_status_label = QLabel("Ready to scan")
-        self.scan_status_label.setObjectName("statusLabel")
+        self.scan_status_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         
         # Time estimate label
         self.time_estimate_label = QLabel("")
-        self.time_estimate_label.setObjectName("helpLabel")
+        self.time_estimate_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         
         progress_layout.addWidget(self.scan_progress)
         progress_layout.addWidget(self.port_scan_progress)
@@ -353,13 +364,14 @@ class PingTab(QWidget):
         """Create the Network Adapters tab."""
         self.adapters_tab = QWidget()
         adapters_layout = QVBoxLayout(self.adapters_tab)
-        self.scaler.spacing(adapters_layout, 10)
-        self.scaler.margins(adapters_layout, 10, 10, 10, 10)
+        self.scaler.spacing(adapters_layout, self.scaler.SPACING_MEDIUM)
+        self.scaler.margins(adapters_layout, self.scaler.SPACING_LARGE, self.scaler.SPACING_LARGE, self.scaler.SPACING_LARGE, self.scaler.SPACING_LARGE)
 
         # Network Adapters content
         adapters_group = QGroupBox("Network Adapters")
-        adapters_group.setObjectName("adaptersGroup")
+        adapters_group.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         adapters_group_layout = QVBoxLayout(adapters_group)
+        self.scaler.spacing(adapters_group_layout, self.scaler.SPACING_SMALL)
 
         # Table for adapters
         self.adapters_table = QTableWidget(0, 6)
@@ -378,20 +390,22 @@ class PingTab(QWidget):
 
         # Refresh button for adapters
         adapters_button_layout = QHBoxLayout()
+        self.scaler.spacing(adapters_button_layout, self.scaler.SPACING_SMALL)
+        
         self.refresh_adapters_button = QPushButton("Refresh Adapters")
-        self.refresh_adapters_button.setObjectName("actionButton")
+        self.refresh_adapters_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.refresh_adapters_button.clicked.connect(self.refresh_network_adapters)
         adapters_button_layout.addWidget(self.refresh_adapters_button)
 
         # Add a "Use Selected IP" button to fill in the start IP field
         self.use_selected_ip_button = QPushButton("Use Selected IP")
-        self.use_selected_ip_button.setObjectName("actionButton")
+        self.use_selected_ip_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.use_selected_ip_button.clicked.connect(self.use_selected_adapter_ip)
         adapters_button_layout.addWidget(self.use_selected_ip_button)
         
         # Scan local network button
         self.scan_local_button = QPushButton("Scan Local Network")
-        self.scan_local_button.setObjectName("actionButton")
+        self.scan_local_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM, weight=QFont.Weight.Bold))
         self.scan_local_button.clicked.connect(self.scan_local_network)
         adapters_button_layout.addWidget(self.scan_local_button)
 
@@ -407,17 +421,18 @@ class PingTab(QWidget):
         """Create the Scan Results tab."""
         self.results_tab = QWidget()
         results_layout = QVBoxLayout(self.results_tab)
-        self.scaler.spacing(results_layout, 10)
-        self.scaler.margins(results_layout, 10, 10, 10, 10)
+        self.scaler.spacing(results_layout, self.scaler.SPACING_MEDIUM)
+        self.scaler.margins(results_layout, self.scaler.SPACING_LARGE, self.scaler.SPACING_LARGE, self.scaler.SPACING_LARGE, self.scaler.SPACING_LARGE)
         
         # Results section
         results_group = QGroupBox("Scan Results")
-        results_group.setObjectName("rxPanel")
+        results_group.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         results_group_layout = QVBoxLayout(results_group)
+        self.scaler.spacing(results_group_layout, self.scaler.SPACING_SMALL)
         
         # Summary label
         self.results_summary_label = QLabel("No scan results yet")
-        self.results_summary_label.setObjectName("helpLabel")
+        self.results_summary_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         results_group_layout.addWidget(self.results_summary_label)
         
         # Table for results
@@ -448,16 +463,18 @@ class PingTab(QWidget):
         
         # Results control buttons
         results_buttons_layout = QHBoxLayout()
+        self.scaler.spacing(results_buttons_layout, self.scaler.SPACING_SMALL)
         
         self.clear_results_button = QPushButton("Clear Results")
-        self.clear_results_button.setObjectName("clearButton")
+        self.clear_results_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.clear_results_button.clicked.connect(self.clear_ping_results)
         
         self.export_results_button = QPushButton("Export Results")
-        self.export_results_button.setObjectName("actionButton")
+        self.export_results_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.export_results_button.clicked.connect(self.export_ping_results)
         
         self.show_active_only_checkbox = QCheckBox("Show Active Hosts Only")
+        self.show_active_only_checkbox.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.show_active_only_checkbox.toggled.connect(self.filter_ping_results)
         
         results_buttons_layout.addWidget(self.clear_results_button)
@@ -472,14 +489,8 @@ class PingTab(QWidget):
     
     def setup_fonts(self):
         """Set up fonts with proper scaling."""
-        # Define font stacks
-        code_font = "JetBrains Mono, Fira Code, Source Code Pro, Consolas, Courier New"
-        
-        # Create and configure fonts with scaled size
-        table_font = QFont()
-        table_font.setFamily("Consolas")
-        table_font.setPointSize(self.scaler.value(10))
-        table_font.setStyleHint(QFont.StyleHint.Monospace)
+        # Get consistent fonts from scaler
+        table_font = self.scaler.get_code_font(self.scaler.FONT_SIZE_LARGE)
         
         # Apply to tables
         self.adapters_table.setFont(table_font)
@@ -865,10 +876,10 @@ class PingTab(QWidget):
         ip_item = QTableWidgetItem(result["ip"])
         self.results_table.setItem(row, 0, ip_item)
         
-        # Status with color
+        # Status with color - using QPalette-based colors
         status = "Active" if result["success"] else "Down"
         status_item = QTableWidgetItem(status)
-        status_item.setForeground(QColor("#7EC7A2" if result["success"] else "#e06c75"))
+        # Use default Fusion styling
         self.results_table.setItem(row, 1, status_item)
         
         # Response time
@@ -1241,10 +1252,10 @@ class PingTab(QWidget):
                 gateway_item = QTableWidgetItem(adapter.get("default_gateway", "N/A"))
                 self.adapters_table.setItem(row, 4, gateway_item)
                 
-                # Status (simplified)
+                # Status (simplified) - using QPalette-based colors
                 status = "Active" if ip_addresses else "Inactive"
                 status_item = QTableWidgetItem(status)
-                status_item.setForeground(QColor("#7EC7A2" if ip_addresses else "#e06c75"))
+                # Use default Fusion styling
                 self.adapters_table.setItem(row, 5, status_item)
             
             self.status_message.emit(f"Found {len(adapters)} network adapters", 3000)

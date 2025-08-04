@@ -9,12 +9,11 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
                            QInputDialog, QMessageBox, QGroupBox, QSplitter,
                            QFrame, QFileDialog, QCompleter)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QTextCursor, QColor, QTextCharFormat, QFont, QPalette
+from PyQt6.QtGui import QTextCursor, QTextCharFormat, QFont
 
 from core.serial_monitor import SerialMonitor
 from core.serial_thread import SerialThread
 from core.command_sequence import CommandSequence
-from theme_config import get_scaled_stylesheet, COLORS
 
 
 class SerialTab(QWidget):
@@ -68,15 +67,9 @@ class SerialTab(QWidget):
     def init_ui(self):
         """Initialize the Enhanced Serial Monitor tab UI."""
         main_layout = QVBoxLayout(self)
-        self.scaler.spacing(main_layout, 10)
-        self.scaler.margins(main_layout, 10, 10, 10, 10)
+        self.scaler.spacing(main_layout, self.scaler.SPACING_MEDIUM)
+        self.scaler.margins(main_layout, self.scaler.SPACING_LARGE, self.scaler.SPACING_LARGE, self.scaler.SPACING_LARGE, self.scaler.SPACING_LARGE)
         
-        # Apply the theme stylesheet
-        self.setStyleSheet(get_scaled_stylesheet(
-            scale_factor=1.0,  # Assuming the scaler handles this elsewhere
-            code_font="JetBrains Mono, Fira Code, Source Code Pro, Consolas, Courier New",
-            ui_font="Segoe UI, Roboto, Arial, sans-serif"
-        ))
         
         # Create the main splitter for flexible layout
         main_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -84,44 +77,41 @@ class SerialTab(QWidget):
         
         # Top control panel with connection and sequence controls
         top_panel = QWidget()
-        top_panel.setObjectName("topPanel")
         top_layout = QHBoxLayout(top_panel)
-        self.scaler.spacing(top_layout, 10)
+        self.scaler.spacing(top_layout, self.scaler.SPACING_MEDIUM)
         
         # Connection controls group
         connection_group = QGroupBox("Connection Settings")
-        connection_group.setObjectName("connectionGroup")
+        connection_group.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         connection_layout = QVBoxLayout(connection_group)
-        self.scaler.spacing(connection_layout, 8)
+        self.scaler.spacing(connection_layout, self.scaler.SPACING_SMALL)
         
         port_layout = QHBoxLayout()
-        port_label = QLabel("PORT")
-        port_label.setObjectName("sectionLabel")
+        port_label = QLabel("Port")
+        port_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         port_layout.addWidget(port_label)
         
         self.port_combo = QComboBox()
+        self.port_combo.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.port_combo.currentTextChanged.connect(self.update_monitor)
         port_layout.addWidget(self.port_combo)
         
         # Refresh port button
         self.refresh_button = QPushButton("⟳")
+        self.refresh_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.refresh_button.setToolTip("Refresh Ports")
-        self.refresh_button.setObjectName("iconButton")
-        self.refresh_button.setFixedSize(
-            self.scaler.value(30), 
-            self.scaler.value(30)
-        )
         self.refresh_button.clicked.connect(self.update_port_list)
         port_layout.addWidget(self.refresh_button)
         
         connection_layout.addLayout(port_layout)
         
         baud_layout = QHBoxLayout()
-        baud_label = QLabel("BAUD")
-        baud_label.setObjectName("sectionLabel")
+        baud_label = QLabel("Baud")
+        baud_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         baud_layout.addWidget(baud_label)
         
         self.baud_combo = QComboBox()
+        self.baud_combo.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.baud_combo.addItems(['300', '1200', '2400', '4800', '9600', '19200', 
                                  '38400', '57600', '115200', '230400'])
         self.baud_combo.setCurrentText('9600')
@@ -131,35 +121,40 @@ class SerialTab(QWidget):
         connection_layout.addLayout(baud_layout)
         
         # Connect button
-        self.connect_button = QPushButton("CONNECT")
-        self.connect_button.setObjectName("connectButton")
+        self.connect_button = QPushButton("Connect")
+        self.connect_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM, weight=QFont.Weight.Bold))
         self.connect_button.clicked.connect(self.toggle_connection)
+        
+        # Remove custom styling - use theme system
         connection_layout.addWidget(self.connect_button)
         
         # Add connection status indicator
         self.connection_status = QLabel("Status: Disconnected")
-        self.connection_status.setObjectName("statusLabel")
-        self.connection_status.setStyleSheet(f"color: {COLORS['status_disconnected']};")
+        self.connection_status.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        
+        # Remove custom styling - use theme system
         connection_layout.addWidget(self.connection_status)
         
         top_layout.addWidget(connection_group, 1)
         
         # Sequence controls group
         sequence_group = QGroupBox("Command Sequences")
-        sequence_group.setObjectName("sequenceGroup")
+        sequence_group.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         sequence_layout = QVBoxLayout(sequence_group)
+        self.scaler.spacing(sequence_layout, self.scaler.SPACING_SMALL)
         
         sequence_header = QLabel("Load and run predefined command sequences")
-        sequence_header.setObjectName("sectionLabel")
+        sequence_header.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         sequence_layout.addWidget(sequence_header)
         
         sequence_combo_layout = QHBoxLayout()
         self.sequence_combo = QComboBox()
+        self.sequence_combo.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.update_sequence_combo()
         sequence_combo_layout.addWidget(self.sequence_combo, 1)
         
         self.run_sequence_button = QPushButton("▶ Run")
-        self.run_sequence_button.setObjectName("actionButton")
+        self.run_sequence_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.run_sequence_button.clicked.connect(self.run_selected_sequence)
         sequence_combo_layout.addWidget(self.run_sequence_button)
         
@@ -167,15 +162,18 @@ class SerialTab(QWidget):
         
         sequence_buttons_layout = QHBoxLayout()
         self.save_sequence_button = QPushButton("Save New")
+        self.save_sequence_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.save_sequence_button.clicked.connect(self.save_new_sequence)
         sequence_buttons_layout.addWidget(self.save_sequence_button)
         
         self.delete_sequence_button = QPushButton("Delete")
+        self.delete_sequence_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.delete_sequence_button.clicked.connect(self.delete_selected_sequence)
         sequence_buttons_layout.addWidget(self.delete_sequence_button)
         
         # Add export/import buttons
         self.export_sequences_button = QPushButton("Export All")
+        self.export_sequences_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.export_sequences_button.clicked.connect(self.export_sequences)
         sequence_buttons_layout.addWidget(self.export_sequences_button)
         
@@ -188,9 +186,8 @@ class SerialTab(QWidget):
         
         # Middle panel with I/O displays
         io_panel = QWidget()
-        io_panel.setObjectName("ioPanel")
         io_layout = QVBoxLayout(io_panel)
-        self.scaler.spacing(io_layout, 10)
+        self.scaler.spacing(io_layout, self.scaler.SPACING_MEDIUM)
         
         # Create a splitter for RX and TX displays - horizontal arrangement
         display_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -198,28 +195,26 @@ class SerialTab(QWidget):
         
         # RX Display with styled header (left panel)
         rx_panel = QWidget()
-        rx_panel.setObjectName("rxPanel")
         rx_layout = QVBoxLayout(rx_panel)
         rx_layout.setContentsMargins(0, 0, 5, 0)  # Add a small right margin
         
         rx_header = QWidget()
-        rx_header.setObjectName("displayHeader")
         rx_header_layout = QHBoxLayout(rx_header)
         
-        rx_title = QLabel("INCOMING DATA (RX)")
-        rx_title.setObjectName("displayTitle")
+        rx_title = QLabel("Incoming Data (RX)")
+        rx_title.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM, weight=QFont.Weight.Bold))
         rx_header_layout.addWidget(rx_title)
         
         # Add RX stats display
         self.rx_stats_label = QLabel("0 B/s (0 bytes total)")
-        self.rx_stats_label.setObjectName("statsLabel")
+        self.rx_stats_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         rx_header_layout.addWidget(self.rx_stats_label)
         
         rx_header_layout.addStretch()
         
         # RX filter toggle
         self.filter_rx_toggle = QPushButton("Filter")
-        self.filter_rx_toggle.setObjectName("toggleButton")
+        self.filter_rx_toggle.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.filter_rx_toggle.setCheckable(True)
         self.filter_rx_toggle.setToolTip(
             "Filter Incoming Data\n\n"
@@ -233,7 +228,7 @@ class SerialTab(QWidget):
         rx_header_layout.addWidget(self.filter_rx_toggle)
         
         self.clear_rx_button = QPushButton("Clear")
-        self.clear_rx_button.setObjectName("clearButton")
+        self.clear_rx_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.clear_rx_button.clicked.connect(self.clear_rx_display)
         rx_header_layout.addWidget(self.clear_rx_button)
         
@@ -241,34 +236,31 @@ class SerialTab(QWidget):
         
         self.rx_display = QTextEdit()
         self.rx_display.setReadOnly(True)
-        self.rx_display.setObjectName("rxDisplay")
         rx_layout.addWidget(self.rx_display)
         
         display_splitter.addWidget(rx_panel)
         
         # TX Display with styled header (right panel)
         tx_panel = QWidget()
-        tx_panel.setObjectName("txPanel")
         tx_layout = QVBoxLayout(tx_panel)
         tx_layout.setContentsMargins(5, 0, 0, 0)  # Add a small left margin
         
         tx_header = QWidget()
-        tx_header.setObjectName("displayHeader")
         tx_header_layout = QHBoxLayout(tx_header)
         
-        tx_title = QLabel("OUTGOING DATA (TX)")
-        tx_title.setObjectName("displayTitle")
+        tx_title = QLabel("Outgoing Data (TX)")
+        tx_title.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM, weight=QFont.Weight.Bold))
         tx_header_layout.addWidget(tx_title)
         
         # Add TX stats display
         self.tx_stats_label = QLabel("0 B/s (0 bytes total)")
-        self.tx_stats_label.setObjectName("statsLabel")
+        self.tx_stats_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         tx_header_layout.addWidget(self.tx_stats_label)
         
         tx_header_layout.addStretch()
         
         self.clear_tx_button = QPushButton("Clear")
-        self.clear_tx_button.setObjectName("clearButton")
+        self.clear_tx_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.clear_tx_button.clicked.connect(self.clear_tx_display)
         tx_header_layout.addWidget(self.clear_tx_button)
         
@@ -276,7 +268,6 @@ class SerialTab(QWidget):
         
         self.tx_display = QTextEdit()
         self.tx_display.setReadOnly(True)
-        self.tx_display.setObjectName("txDisplay")
         tx_layout.addWidget(self.tx_display)
         
         display_splitter.addWidget(tx_panel)
@@ -291,47 +282,45 @@ class SerialTab(QWidget):
         
         # Bottom control panel - IMPROVED LAYOUT
         bottom_panel = QWidget()
-        bottom_panel.setObjectName("bottomPanel")
         bottom_layout = QVBoxLayout(bottom_panel)
-        self.scaler.spacing(bottom_layout, 8)
+        self.scaler.spacing(bottom_layout, self.scaler.SPACING_SMALL)
         
         # Create a unified input and control row
         command_row = QHBoxLayout()
-        self.scaler.spacing(command_row, 10)
+        self.scaler.spacing(command_row, self.scaler.SPACING_MEDIUM)
         
         # Left section: History button
         self.history_button = QPushButton("↑")
+        self.history_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.history_button.setToolTip("Command History")
-        self.history_button.setObjectName("iconButton")
-        self.history_button.setFixedSize(self.scaler.value(30), self.scaler.value(30))
         self.history_button.clicked.connect(self.show_command_history)
         command_row.addWidget(self.history_button)
         
         # Center section: Input line with larger proportion
         self.input_line = QLineEdit()
-        self.input_line.setObjectName("commandInput")
+        self.input_line.setFont(self.scaler.get_code_font())
         self.input_line.setPlaceholderText("Type command here...")
         self.input_line.returnPressed.connect(self.send_data)
         command_row.addWidget(self.input_line, 3)  # Give it more space proportion
         
         # Right section: Special keys and send button in a grouped layout
         keys_send_layout = QHBoxLayout()
-        keys_send_layout.setSpacing(self.scaler.value(4))
+        keys_send_layout.setSpacing(self.scaler.value(self.scaler.SPACING_SMALL))
         
         # Special keys directly in the layout
-        self.enter_key = QPushButton("ENTER")
-        self.enter_key.setObjectName("specialKey")
+        self.enter_key = QPushButton("Enter")
+        self.enter_key.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.enter_key.clicked.connect(lambda: self.send_special_key("Enter"))
         keys_send_layout.addWidget(self.enter_key)
         
-        self.esc_key = QPushButton("ESC")
-        self.esc_key.setObjectName("specialKey")
+        self.esc_key = QPushButton("Esc")
+        self.esc_key.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.esc_key.clicked.connect(lambda: self.send_special_key("Escape"))
         keys_send_layout.addWidget(self.esc_key)
         
         # Send button - now adjacent to special keys
         self.send_button = QPushButton("Send")
-        self.send_button.setObjectName("sendButton")
+        self.send_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM, weight=QFont.Weight.Bold))
         self.send_button.clicked.connect(self.send_data)
         keys_send_layout.addWidget(self.send_button)
         
@@ -344,36 +333,35 @@ class SerialTab(QWidget):
         
         # Additional controls layout
         controls_panel = QWidget()
-        controls_panel.setObjectName("controlsPanel")
         controls_layout = QHBoxLayout(controls_panel)
         
         # Extended special keys section
         keys_group = QGroupBox("Special Keys")
-        keys_group.setObjectName("keysGroup")
+        keys_group.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         keys_layout = QHBoxLayout(keys_group)
-        self.scaler.spacing(keys_layout, 8)
+        self.scaler.spacing(keys_layout, self.scaler.SPACING_SMALL)
         
         self.backspace_key = QPushButton("⌫")
-        self.backspace_key.setObjectName("specialKey")
+        self.backspace_key.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.backspace_key.setToolTip("Backspace")
         self.backspace_key.clicked.connect(lambda: self.send_special_key("Backspace"))
         keys_layout.addWidget(self.backspace_key)
         
         self.tab_key = QPushButton("⇥")
-        self.tab_key.setObjectName("specialKey")
+        self.tab_key.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.tab_key.setToolTip("Tab")
         self.tab_key.clicked.connect(lambda: self.send_special_key("Tab"))
         keys_layout.addWidget(self.tab_key)
         
         # Add Del and Space keys
         self.del_key = QPushButton("Del")
-        self.del_key.setObjectName("specialKey")
+        self.del_key.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.del_key.setToolTip("Delete")
         self.del_key.clicked.connect(lambda: self.send_special_key("Delete"))
         keys_layout.addWidget(self.del_key)
         
         self.space_key = QPushButton("Space")
-        self.space_key.setObjectName("specialKey")
+        self.space_key.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.space_key.clicked.connect(lambda: self.send_special_key("Space"))
         keys_layout.addWidget(self.space_key)
         
@@ -381,37 +369,38 @@ class SerialTab(QWidget):
         
         # Toggle switches section
         toggle_group = QGroupBox("Display Options")
-        toggle_group.setObjectName("toggleGroup")
+        toggle_group.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         toggle_layout = QHBoxLayout(toggle_group)
+        self.scaler.spacing(toggle_layout, self.scaler.SPACING_SMALL)
         
-        self.timestamp_toggle = QPushButton("TIMECODE")
-        self.timestamp_toggle.setObjectName("toggleButton")
+        self.timestamp_toggle = QPushButton("Timecode")
+        self.timestamp_toggle.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.timestamp_toggle.setCheckable(True)
         self.timestamp_toggle.clicked.connect(self.toggle_timestamp)
         toggle_layout.addWidget(self.timestamp_toggle)
         
-        self.hex_toggle = QPushButton("HEX MODE")
-        self.hex_toggle.setObjectName("toggleButton")
+        self.hex_toggle = QPushButton("Hex Mode")
+        self.hex_toggle.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.hex_toggle.setCheckable(True)
         self.hex_toggle.clicked.connect(self.toggle_hex)
         toggle_layout.addWidget(self.hex_toggle)
         
-        self.raw_mode_toggle = QPushButton("AUTO-TERM")
-        self.raw_mode_toggle.setObjectName("toggleButton")
+        self.raw_mode_toggle = QPushButton("Auto-Term")
+        self.raw_mode_toggle.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.raw_mode_toggle.setCheckable(True)
         self.raw_mode_toggle.setChecked(True)
         self.raw_mode_toggle.clicked.connect(self.toggle_raw_mode)
         toggle_layout.addWidget(self.raw_mode_toggle)
         
-        self.auto_clear_toggle = QPushButton("AUTO-CLEAR")
-        self.auto_clear_toggle.setObjectName("toggleButton")
+        self.auto_clear_toggle = QPushButton("Auto-Clear")
+        self.auto_clear_toggle.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.auto_clear_toggle.setCheckable(True)
         self.auto_clear_toggle.setChecked(self.auto_clear_rx)
         self.auto_clear_toggle.clicked.connect(self.toggle_auto_clear)
         toggle_layout.addWidget(self.auto_clear_toggle)
         
-        self.clear_all_button = QPushButton("CLEAR ALL")
-        self.clear_all_button.setObjectName("clearAllButton")
+        self.clear_all_button = QPushButton("Clear All")
+        self.clear_all_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.clear_all_button.clicked.connect(self.clear_all_displays)
         toggle_layout.addWidget(self.clear_all_button)
         
@@ -494,19 +483,12 @@ class SerialTab(QWidget):
     
     def setup_fonts(self):
         """Set up fonts with proper scaling."""
-        # Define font stacks
-        code_font = "JetBrains Mono, Fira Code, Source Code Pro, Consolas, Courier New"
+        # Get consistent fonts from scaler
+        code_font = self.scaler.get_code_font()
         
-        # Create and configure a monospace font with scaled size
-        monospace_font = QFont()
-        monospace_font.setFamily("JetBrains Mono")
-        monospace_font.setPointSize(self.scaler.value(14))
-        monospace_font.setStyleHint(QFont.StyleHint.Monospace)
-        
-        # Apply to text elements
-        self.rx_display.setFont(monospace_font)
-        self.tx_display.setFont(monospace_font)
-        self.input_line.setFont(monospace_font)
+        # Apply to text displays
+        self.rx_display.setFont(code_font)
+        self.tx_display.setFont(code_font)
     
     def setup_command_completer(self):
         """Setup auto-completion for common commands."""
@@ -534,9 +516,11 @@ class SerialTab(QWidget):
         templates_layout = QHBoxLayout()
         
         templates_label = QLabel("Templates:")
+        templates_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         templates_layout.addWidget(templates_label)
         
         self.templates_combo = QComboBox()
+        self.templates_combo.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         self.templates_combo.addItem("-- Select Template --")
         
         # Add common command templates for various devices
@@ -558,8 +542,8 @@ class SerialTab(QWidget):
         
         # Add button to save current command as template
         save_template_btn = QPushButton("+")
+        save_template_btn.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
         save_template_btn.setToolTip("Save current command as template")
-        save_template_btn.setFixedSize(self.scaler.value(30), self.scaler.value(30))
         save_template_btn.clicked.connect(self.save_as_template)
         templates_layout.addWidget(save_template_btn)
         
@@ -673,16 +657,14 @@ class SerialTab(QWidget):
         
         if self.monitor and self.monitor.ser and self.monitor.ser.is_open:
             self.monitor.stop()
-            self.connect_button.setText("CONNECT")
+            self.connect_button.setText("Connect")
             self.connect_button.setChecked(False)
             self.connection_status.setText("Status: Disconnected")
-            self.connection_status.setStyleSheet(f"color: {COLORS['status_disconnected']};")
         else:
             if self.monitor and self.monitor.start():
-                self.connect_button.setText("DISCONNECT")
+                self.connect_button.setText("Disconnect")
                 self.connect_button.setChecked(True)
                 self.connection_status.setText("Status: Connected")
-                self.connection_status.setStyleSheet(f"color: {COLORS['status_connected']};")
         self.update_status()
     
     def setup_serial_thread(self):
@@ -717,7 +699,7 @@ class SerialTab(QWidget):
 
         cursor = self.rx_display.textCursor()
         format = QTextCharFormat()
-        format.setForeground(QColor(COLORS["rx_text"]))
+        # Use default text color from Fusion theme
         cursor.setCharFormat(format)
         cursor.insertText(f"[RX] {text}\n")
         self.rx_display.setTextCursor(cursor)
@@ -746,13 +728,6 @@ class SerialTab(QWidget):
             # Visual feedback - briefly disable the input and change button appearance
             self.input_line.setEnabled(False)
             self.send_button.setText("Sending...")
-            self.send_button.setStyleSheet(f"""
-                background-color: {COLORS["status_alert"]};
-                color: white;
-                border-radius: 4px;
-                padding: 6px 12px;
-                font-weight: bold;
-            """)
             
             # Use a timer to restore the UI after a short delay
             QTimer.singleShot(150, self.restore_send_ui)
@@ -773,7 +748,7 @@ class SerialTab(QWidget):
 
                 cursor = self.tx_display.textCursor()
                 format = QTextCharFormat()
-                format.setForeground(QColor(COLORS["tx_text"]))
+                # Use default text color from Fusion theme
                 cursor.setCharFormat(format)
                 cursor.insertText(f"[TX] {display_text}\n")
                 self.tx_display.setTextCursor(cursor)
@@ -785,9 +760,6 @@ class SerialTab(QWidget):
         self.input_line.setEnabled(True)
         self.input_line.setFocus()
         self.send_button.setText("Send")
-        
-        # Restore original styling by removing the inline style
-        self.send_button.setStyleSheet("")
     
     def send_special_key(self, key):
         """Send a special key directly to the serial connection."""
@@ -815,9 +787,8 @@ class SerialTab(QWidget):
             button = self.space_key
             
         if button:
-            original_style = button.styleSheet()
-            button.setStyleSheet(f"background-color: {COLORS['special_key_hover']}; color: white;")
-            QTimer.singleShot(150, lambda: button.setStyleSheet(original_style))
+            # Visual feedback handled by Fusion style on button press
+            pass
             
         sent_data = self.monitor.send_key(key)
         if sent_data:
@@ -829,7 +800,7 @@ class SerialTab(QWidget):
             # Display the key press in the TX display
             cursor = self.tx_display.textCursor()
             format = QTextCharFormat()
-            format.setForeground(QColor(COLORS["tx_text"]))
+            # Use default text color from Fusion theme
             cursor.setCharFormat(format)
             cursor.insertText(f"[KEY] {key}\n")
             self.tx_display.setTextCursor(cursor)
@@ -910,15 +881,17 @@ class SerialTab(QWidget):
         
         # Update button appearance based on connection status
         if status == "ONLINE":
-            self.connect_button.setText("DISCONNECT")
+            self.connect_button.setText("Disconnect")
             self.connect_button.setChecked(True)
             self.connection_status.setText("Status: Connected")
-            self.connection_status.setStyleSheet(f"color: {COLORS['status_connected']};")
+            
+            # Remove custom styling - use theme system
         else:
-            self.connect_button.setText("CONNECT")
+            self.connect_button.setText("Connect")
             self.connect_button.setChecked(False)
             self.connection_status.setText("Status: Disconnected")
-            self.connection_status.setStyleSheet(f"color: {COLORS['status_disconnected']};")
+            
+            # Remove custom styling - use theme system
         
         # Emit connection info to parent
         self.status_message.emit(f"PORT: {port} | BAUD: {baud} | STATUS: {status}", 0)
@@ -931,7 +904,7 @@ class SerialTab(QWidget):
         cursor = self.rx_display.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         format = QTextCharFormat()
-        format.setForeground(QColor(COLORS["error_text"]))
+        # Use default text color from Fusion theme
         cursor.setCharFormat(format)
         cursor.insertText(f"[ERROR] {message}\n")
         self.rx_display.setTextCursor(cursor)
