@@ -16,7 +16,10 @@ from PyQt6.QtGui import QFont, QTextCursor
 from core.port_monitor import SerialPortMonitor
 from utils.device_identifier import (identify_device_by_vid_pid, 
                                    identify_device_by_description,
-                                   get_device_driver_recommendations)
+                                   get_device_driver_recommendations,
+                                   get_enhanced_device_info,
+                                   format_enhanced_device_report,
+                                   get_enhanced_vid_pid)
 
 
 class SerialPortScannerTab(QWidget):
@@ -294,6 +297,8 @@ class SerialPortScannerTab(QWidget):
                 if port.device in self.port_info:
                     # Update existing port info
                     port_info = self.port_info[port.device]
+                    port_info["device"] = port.device
+                    port_info["port_name"] = port.device
                     port_info["description"] = port.description
                     port_info["manufacturer"] = port.manufacturer or "N/A"
                     port_info["hwid"] = port.hwid
@@ -305,6 +310,8 @@ class SerialPortScannerTab(QWidget):
                 else:
                     # Add new port info
                     self.port_info[port.device] = {
+                        "device": port.device,  # Add device name for reference
+                        "port_name": port.device,  # Alternative reference
                         "description": port.description,
                         "manufacturer": port.manufacturer or "N/A",
                         "hwid": port.hwid,
@@ -379,10 +386,14 @@ class SerialPortScannerTab(QWidget):
             # Manufacturer
             self.ports_table.setItem(row, 2, QTableWidgetItem(info["manufacturer"]))
             
-            # VID:PID
+            # VID:PID with enhanced extraction
             vid_pid = "N/A"
-            if info["vid"] is not None and info["pid"] is not None:
-                vid_pid = f"{info['vid']:04X}:{info['pid']:04X}"
+            enhanced_vid, enhanced_pid = get_enhanced_vid_pid(info)
+            if enhanced_vid is not None and enhanced_pid is not None:
+                vid_pid = f"{enhanced_vid:04X}:{enhanced_pid:04X}"
+                # Update port info with extracted VID/PID
+                info["vid"] = enhanced_vid
+                info["pid"] = enhanced_pid
             self.ports_table.setItem(row, 3, QTableWidgetItem(vid_pid))
             
             # Status - use default Fusion styling
@@ -580,7 +591,7 @@ class SerialPortScannerTab(QWidget):
             self.error_occurred.emit(f"Error refreshing port information: {str(e)}")
     
     def identify_selected_device(self):
-        """Identify the selected port device based on VID:PID or description."""
+        """Identify the selected port device with enhanced USB descriptor and chipset analysis."""
         selected_items = self.ports_table.selectedItems()
         if not selected_items:
             self.status_message.emit("No port selected", 0)
@@ -595,44 +606,56 @@ class SerialPortScannerTab(QWidget):
             return
         
         port_info = self.port_info[port_name]
-        device_info = None
         
-        # Try to identify by VID:PID first
-        if port_info["vid"] is not None and port_info["pid"] is not None:
-            device_info = identify_device_by_vid_pid(port_info["vid"], port_info["pid"])
+        # Get VID/PID using enhanced extraction methods
+        vid, pid = get_enhanced_vid_pid(port_info)
         
-        # If not identified by VID:PID, try by description
-        if not device_info and port_info["description"]:
-            device_info = identify_device_by_description(port_info["description"])
-        
-        # Update details display with identification results
-        if device_info:
+        # Use enhanced device identification
+        if vid is not None and pid is not None:
+            enhanced_info = get_enhanced_device_info(
+                vid, 
+                pid, 
+                port_info.get("description")
+            )
+            
+            # Format and display enhanced report
             cursor = self.details_text.textCursor()
             cursor.movePosition(QTextCursor.MoveOperation.End)
-            cursor.insertText("\n\n===== DEVICE IDENTIFICATION =====\n")
-            cursor.insertText(f"Device: {device_info['name']}\n")
-            cursor.insertText(f"Description: {device_info['description']}\n")
-            cursor.insertText(f"Manufacturer: {device_info['manufacturer']}\n\n")
+            cursor.insertText("\n\n")
+            cursor.insertText(format_enhanced_device_report(enhanced_info))
             
-            # Add driver recommendations
-            cursor.insertText("===== DRIVER RECOMMENDATIONS =====\n")
-            cursor.insertText(get_device_driver_recommendations(device_info))
+            # Add driver recommendations section
+            basic_info = enhanced_info.get('basic_info', {})
+            if basic_info.get('manufacturer'):
+                cursor.insertText("\n\n===== DRIVER RECOMMENDATIONS =====\n")
+                cursor.insertText(get_device_driver_recommendations(basic_info))
+            
             self.details_text.setTextCursor(cursor)
             
-            self.status_message.emit(f"Device identified as {device_info['name']}", 0)
+            # Update status with confidence indication
+            device_name = basic_info.get('name', 'Unknown Device')
+            confidence = basic_info.get('confidence', 0)
+            if confidence > 0.8:
+                status_msg = f"Device identified as {device_name} (High confidence)"
+            elif confidence > 0.5:
+                status_msg = f"Device identified as {device_name} (Medium confidence)"
+            else:
+                status_msg = f"Device possibly identified as {device_name} (Low confidence)"
+            
+            self.status_message.emit(status_msg, 0)
         else:
+            # Fallback for devices without VID/PID
             cursor = self.details_text.textCursor()
             cursor.movePosition(QTextCursor.MoveOperation.End)
             cursor.insertText("\n\n===== DEVICE IDENTIFICATION =====\n")
             cursor.insertText("Could not identify device type specifically.\n")
-            cursor.insertText("This appears to be a generic serial device or uses an unknown chipset.\n\n")
-            
-            # Add general driver recommendations
+            cursor.insertText("This appears to be a generic serial device or uses an unknown chipset.\n")
+            cursor.insertText("VID/PID information not available.\n\n")
             cursor.insertText("===== DRIVER RECOMMENDATIONS =====\n")
-            cursor.insertText(get_device_driver_recommendations(""))
+            cursor.insertText(get_device_driver_recommendations("Unknown"))
             self.details_text.setTextCursor(cursor)
             
-            self.status_message.emit("Device could not be specifically identified", 0)
+            self.status_message.emit("Device could not be identified - no VID/PID", 0)
     
     def autodetect_port_speed(self):
         """Attempt to automatically detect the port speed."""
