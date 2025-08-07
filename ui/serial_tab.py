@@ -1,20 +1,27 @@
 """
-Enhanced Serial Monitor tab UI component with simplified layout.
+Enhanced Serial Monitor tab UI component with ribbon-style layout.
+Follows Windows system application design patterns.
 """
 from datetime import datetime
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
                            QLineEdit, QPushButton, QLabel, QComboBox, 
                            QInputDialog, QMessageBox, QGroupBox, QSplitter,
-                           QFrame, QCompleter)
+                           QFrame, QCompleter, QToolButton, QStyle, QSpacerItem,
+                           QSizePolicy, QCheckBox, QGridLayout)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QTextCursor, QTextCharFormat, QFont
+from PyQt6.QtGui import QTextCursor, QTextCharFormat, QFont, QIcon
 
 from core.serial_monitor import SerialMonitor
 from core.serial_thread import SerialThread
+from utils.icon_helper import (get_connect_icon, get_refresh_icon, get_enter_icon, 
+                             get_escape_icon, get_toggle_icon, get_clear_icon,
+                             get_timestamp_icon, get_hex_icon, get_auto_term_icon,
+                             get_filter_icon, get_auto_clear_icon, get_clear_all_icon,
+                             get_send_icon, get_history_icon)
 
 
 class SerialTab(QWidget):
-    """Enhanced Serial Monitor tab UI component."""
+    """Enhanced Serial Monitor tab UI component with ribbon-style layout."""
     
     # Define signals for communication with parent
     status_message = pyqtSignal(str, int)  # message, timeout
@@ -36,12 +43,6 @@ class SerialTab(QWidget):
         self.serial_thread = None
         self.auto_clear_rx = True  # Flag for auto-clearing RX on command
         
-        # Setup UI
-        self.init_ui()
-        self.setup_fonts()
-        self.setup_command_completer()
-        self.update_port_list()
-        
         # Initialize stats
         self.rx_bytes = 0
         self.tx_bytes = 0
@@ -49,284 +50,527 @@ class SerialTab(QWidget):
         self.last_tx = 0
         self.last_time = datetime.now()
         
+        # Store command history
+        self.command_history = []
+        self.history_index = -1
+        
+        # Setup UI
+        self.init_ui()
+        self.setup_fonts()
+        self.setup_command_completer()
+        self.update_port_list()
+        
         # Create timer for stats update
         self.stats_timer = QTimer()
         self.stats_timer.timeout.connect(self.update_stats)
         self.stats_timer.start(1000)  # Update every second
     
     def init_ui(self):
-        """Initialize the Enhanced Serial Monitor tab UI."""
+        """Initialize the Enhanced Serial Monitor tab UI with ribbon layout."""
         main_layout = QVBoxLayout(self)
-        self.scaler.spacing(main_layout, self.scaler.SPACING_MEDIUM)
-        self.scaler.margins(main_layout, self.scaler.SPACING_LARGE, self.scaler.SPACING_LARGE, self.scaler.SPACING_LARGE, self.scaler.SPACING_LARGE)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         
-        # Top Section: Two rows of controls
-        top_section = QVBoxLayout()
-        self.scaler.spacing(top_section, self.scaler.SPACING_SMALL)
+        # Create ribbon toolbar
+        ribbon_widget = self.create_ribbon_widget()
+        main_layout.addWidget(ribbon_widget)
         
-        # First row: Connection, Settings, Actions
-        first_row = QHBoxLayout()
-        self.scaler.spacing(first_row, self.scaler.SPACING_MEDIUM)
+        # Create content area with TX/RX displays
+        content_widget = self.create_content_area()
+        main_layout.addWidget(content_widget, 1)
         
-        # Connection controls group
-        connection_group = QGroupBox("Connection")
-        connection_group.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
-        connection_layout = QHBoxLayout(connection_group)
-        self.scaler.spacing(connection_layout, self.scaler.SPACING_SMALL)
+        # Create command bar
+        command_bar = self.create_command_bar()
+        main_layout.addWidget(command_bar)
         
-        # Port selection
-        port_label = QLabel("Port:")
-        port_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        connection_layout.addWidget(port_label)
+        # Create enhanced status bar
+        status_bar = self.create_status_bar()
+        main_layout.addWidget(status_bar)
+    
+    def create_ribbon_widget(self):
+        """Create the ribbon-style toolbar with sections."""
+        ribbon_container = QWidget()
+        ribbon_container.setMaximumHeight(self.scaler.value(90))
         
+        # Create frame for the ribbon with subtle border
+        ribbon_frame = QFrame(ribbon_container)
+        ribbon_frame.setFrameStyle(QFrame.Shape.StyledPanel)
+        ribbon_frame.setLineWidth(1)
+        
+        # Main ribbon layout
+        container_layout = QVBoxLayout(ribbon_container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.addWidget(ribbon_frame)
+        
+        ribbon_layout = QHBoxLayout(ribbon_frame)
+        self.scaler.margins(ribbon_layout, 12, 8, 12, 8)
+        self.scaler.spacing(ribbon_layout, 16)
+        
+        # Add sections
+        ribbon_layout.addLayout(self.create_connection_section())
+        ribbon_layout.addWidget(self.create_separator())
+        ribbon_layout.addLayout(self.create_format_section())
+        ribbon_layout.addWidget(self.create_separator())
+        ribbon_layout.addLayout(self.create_view_section())
+        ribbon_layout.addStretch()
+        
+        return ribbon_container
+    
+    def create_connection_section(self):
+        """Create the connection section of the ribbon."""
+        section_layout = QVBoxLayout()
+        section_layout.setSpacing(self.scaler.value(8))
+        
+        # Section header
+        header = self.create_section_header("Connection")
+        section_layout.addWidget(header)
+        
+        # Controls layout
+        controls_layout = QVBoxLayout()
+        controls_layout.setSpacing(self.scaler.value(8))
+        
+        # Row 1: Port selection and Baud rate
+        row1 = QHBoxLayout()
+        row1.setSpacing(self.scaler.value(8))
+        
+        # Port selection with minimum width
         self.port_combo = QComboBox()
         self.port_combo.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
+        self.port_combo.setMinimumWidth(self.scaler.value(200))
         self.port_combo.currentTextChanged.connect(self.update_monitor)
-        connection_layout.addWidget(self.port_combo)
+        row1.addWidget(self.port_combo)
         
-        # Refresh port button
-        self.refresh_button = QPushButton("⟳")
-        self.refresh_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
-        self.refresh_button.setToolTip("Refresh Ports")
-        self.refresh_button.clicked.connect(self.update_port_list)
-        connection_layout.addWidget(self.refresh_button)
-        
-        # Baud rate
-        baud_label = QLabel("Baud:")
-        baud_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        connection_layout.addWidget(baud_label)
-        
+        # Baud rate with fixed width
         self.baud_combo = QComboBox()
         self.baud_combo.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
+        self.baud_combo.setFixedWidth(self.scaler.value(100))
         self.baud_combo.addItems(['300', '1200', '2400', '4800', '9600', '19200', 
                                  '38400', '57600', '115200', '230400'])
         self.baud_combo.setCurrentText('9600')
         self.baud_combo.currentTextChanged.connect(self.update_monitor)
-        connection_layout.addWidget(self.baud_combo)
+        row1.addWidget(self.baud_combo)
         
-        # Connect button
-        self.connect_button = QPushButton("Connect")
-        self.connect_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM, weight=QFont.Weight.Bold))
+        controls_layout.addLayout(row1)
+        
+        # Row 2: Refresh and Connect buttons
+        row2 = QHBoxLayout()
+        row2.setSpacing(self.scaler.value(8))
+        
+        # Refresh button (text and icon)
+        self.refresh_button = QToolButton()
+        self.refresh_button.setText("Refresh")
+        self.refresh_button.setIcon(get_refresh_icon())
+        self.refresh_button.setToolTip("Refresh Ports")
+        self.refresh_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.refresh_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        self.refresh_button.clicked.connect(self.update_port_list)
+        row2.addWidget(self.refresh_button)
+        
+        # Connect button - primary action
+        self.connect_button = QToolButton()
+        self.connect_button.setText("Connect")
+        self.connect_button.setIcon(get_connect_icon())
+        self.connect_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.connect_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        self.connect_button.setCheckable(True)
         self.connect_button.clicked.connect(self.toggle_connection)
-        connection_layout.addWidget(self.connect_button)
+        row2.addWidget(self.connect_button)
         
-        first_row.addWidget(connection_group)
+        # Add stretch to left-align buttons
+        row2.addStretch()
         
-        # Serial settings group
-        settings_group = QGroupBox("Settings")
-        settings_group.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
-        settings_layout = QHBoxLayout(settings_group)
-        self.scaler.spacing(settings_layout, self.scaler.SPACING_SMALL)
+        controls_layout.addLayout(row2)
         
-        # Toggle switches
-        self.timestamp_toggle = QPushButton("Timecode")
-        self.timestamp_toggle.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        self.timestamp_toggle.setCheckable(True)
-        self.timestamp_toggle.clicked.connect(self.toggle_timestamp)
-        settings_layout.addWidget(self.timestamp_toggle)
+        section_layout.addLayout(controls_layout)
+        section_layout.addStretch()
         
-        self.hex_toggle = QPushButton("Hex Mode")
-        self.hex_toggle.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        self.hex_toggle.setCheckable(True)
-        self.hex_toggle.clicked.connect(self.toggle_hex)
-        settings_layout.addWidget(self.hex_toggle)
+        return section_layout
+    
+    def create_format_section(self):
+        """Create the data format section of the ribbon."""
+        section_layout = QVBoxLayout()
+        section_layout.setSpacing(self.scaler.value(8))
         
-        self.raw_mode_toggle = QPushButton("Auto-Term")
-        self.raw_mode_toggle.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        self.raw_mode_toggle.setCheckable(True)
-        self.raw_mode_toggle.setChecked(True)
-        self.raw_mode_toggle.clicked.connect(self.toggle_raw_mode)
-        settings_layout.addWidget(self.raw_mode_toggle)
+        # Section header
+        header = self.create_section_header("Data Format")
+        section_layout.addWidget(header)
         
-        self.auto_clear_toggle = QPushButton("Auto-Clear")
-        self.auto_clear_toggle.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        self.auto_clear_toggle.setCheckable(True)
-        self.auto_clear_toggle.setChecked(self.auto_clear_rx)
-        self.auto_clear_toggle.clicked.connect(self.toggle_auto_clear)
-        settings_layout.addWidget(self.auto_clear_toggle)
+        # Grid layout for toggle buttons (2x2)
+        grid = QGridLayout()
+        grid.setSpacing(self.scaler.value(8))
+        grid.setHorizontalSpacing(self.scaler.value(8))
+        grid.setVerticalSpacing(self.scaler.value(8))
         
-        # RX filter toggle
-        self.filter_rx_toggle = QPushButton("Filter")
-        self.filter_rx_toggle.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        self.filter_rx_toggle.setCheckable(True)
-        self.filter_rx_toggle.setToolTip(
+        # Create toggle buttons with consistent styling
+        self.timestamp_check = self.create_toggle_button("Timestamp", "Add timestamps to data", 
+                                                       checked=False, icon_checked=get_timestamp_icon(),
+                                                       icon_unchecked=get_toggle_icon(False))
+        self.timestamp_check.clicked.connect(self.toggle_timestamp)
+        grid.addWidget(self.timestamp_check, 0, 0)
+        
+        self.hex_check = self.create_toggle_button("Hex Mode", "Display data as hexadecimal", 
+                                                 checked=False, icon_checked=get_hex_icon(),
+                                                 icon_unchecked=get_toggle_icon(False))
+        self.hex_check.clicked.connect(self.toggle_hex)
+        grid.addWidget(self.hex_check, 0, 1)
+        
+        self.auto_term_check = self.create_toggle_button("Auto-Term", "Automatically add line terminators", 
+                                                       checked=True, icon_checked=get_auto_term_icon(),
+                                                       icon_unchecked=get_toggle_icon(False))
+        self.auto_term_check.clicked.connect(self.toggle_raw_mode)
+        grid.addWidget(self.auto_term_check, 1, 0)
+        
+        section_layout.addLayout(grid)
+        section_layout.addStretch()
+        
+        return section_layout
+    
+    def create_view_section(self):
+        """Create the view section of the ribbon."""
+        section_layout = QVBoxLayout()
+        section_layout.setSpacing(self.scaler.value(8))
+        
+        # Section header
+        header = self.create_section_header("View")
+        section_layout.addWidget(header)
+        
+        # Controls layout
+        controls_layout = QVBoxLayout()
+        controls_layout.setSpacing(self.scaler.value(8))
+        
+        # Row 1: Filter and Auto-Clear toggle buttons
+        row1 = QHBoxLayout()
+        row1.setSpacing(self.scaler.value(8))
+        
+        self.filter_check = self.create_toggle_button("Filter RX", 
             "Filter Incoming Data\n\n"
-            "When enabled, this filter:\n"
-            "• Shows normal printable characters as-is\n"
-            "• Preserves newlines, tabs, and carriage returns\n"
-            "• Displays other non-printable characters as hex values [XX]\n\n"
-            "Useful for protocols with binary data or control characters."
-        )
-        self.filter_rx_toggle.clicked.connect(self.toggle_rx_filter)
-        settings_layout.addWidget(self.filter_rx_toggle)
+            "• Shows printable characters\n"
+            "• Preserves newlines and tabs\n"
+            "• Shows non-printable as [XX]",
+            checked=False, icon_checked=get_filter_icon(),
+            icon_unchecked=get_toggle_icon(False))
+        self.filter_check.clicked.connect(self.toggle_rx_filter)
+        row1.addWidget(self.filter_check)
         
-        first_row.addWidget(settings_group)
+        self.auto_clear_check = self.create_toggle_button("Auto-Clear", "Clear RX display when sending new command",
+                                                        checked=self.auto_clear_rx, icon_checked=get_auto_clear_icon(),
+                                                        icon_unchecked=get_toggle_icon(False))
+        self.auto_clear_check.clicked.connect(self.toggle_auto_clear)
+        row1.addWidget(self.auto_clear_check)
         
-        top_section.addLayout(first_row)
+        # Add stretch to left-align buttons
+        row1.addStretch()
         
-        # Second row: Actions and Command Input
-        second_row = QHBoxLayout()
-        self.scaler.spacing(second_row, self.scaler.SPACING_MEDIUM)
+        controls_layout.addLayout(row1)
         
-        # Actions group (moved from first row)
-        actions_group = QGroupBox("Actions")
-        actions_group.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
-        actions_layout = QHBoxLayout(actions_group)
-        self.scaler.spacing(actions_layout, self.scaler.SPACING_SMALL)
-        
-        self.clear_all_button = QPushButton("Clear All")
+        # Row 2: Clear All button
+        self.clear_all_button = QToolButton()
+        self.clear_all_button.setText("Clear All")
+        self.clear_all_button.setIcon(get_clear_all_icon())
+        self.clear_all_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.clear_all_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.clear_all_button.clicked.connect(self.clear_all_displays)
-        actions_layout.addWidget(self.clear_all_button)
+        controls_layout.addWidget(self.clear_all_button)
         
-        # History button
-        self.history_button = QPushButton("History")
-        self.history_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        self.history_button.setToolTip("Command History")
-        self.history_button.clicked.connect(self.show_command_history)
-        actions_layout.addWidget(self.history_button)
+        section_layout.addLayout(controls_layout)
+        section_layout.addStretch()
         
-        # Special keys
-        self.enter_key = QPushButton("Enter")
-        self.enter_key.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        self.enter_key.clicked.connect(lambda: self.send_special_key("Enter"))
-        actions_layout.addWidget(self.enter_key)
+        return section_layout
+    
+    def create_command_bar(self):
+        """Create the unified command bar."""
+        command_container = QWidget()
+        command_container.setMaximumHeight(self.scaler.value(48))
         
-        self.esc_key = QPushButton("Esc")
-        self.esc_key.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        self.esc_key.clicked.connect(lambda: self.send_special_key("Escape"))
-        actions_layout.addWidget(self.esc_key)
+        # Frame for the command bar (no border)
+        command_frame = QFrame(command_container)
         
-        second_row.addWidget(actions_group)
+        container_layout = QVBoxLayout(command_container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.addWidget(command_frame)
         
-        # Command input group
-        command_group = QGroupBox("Command Input")
-        command_group.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
-        command_layout = QHBoxLayout(command_group)
-        self.scaler.spacing(command_layout, self.scaler.SPACING_SMALL)
+        # Main command bar layout
+        command_layout = QHBoxLayout(command_frame)
+        self.scaler.margins(command_layout, 12, 6, 12, 6)
+        self.scaler.spacing(command_layout, 8)
         
+        # Command input - takes most space
         self.input_line = QLineEdit()
         self.input_line.setFont(self.scaler.get_code_font())
         self.input_line.setPlaceholderText("Type command here...")
+        self.input_line.setClearButtonEnabled(True)
+        self.input_line.setMinimumWidth(self.scaler.value(300))
+        self.input_line.setMinimumHeight(self.scaler.value(28))
         self.input_line.returnPressed.connect(self.send_data)
-        command_layout.addWidget(self.input_line, 1)
+        self.input_line.installEventFilter(self)
+        command_layout.addWidget(self.input_line, 3)  # Stretch factor 3
         
-        self.send_button = QPushButton("Send")
-        self.send_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM, weight=QFont.Weight.Bold))
+        # Primary Send button
+        self.send_button = QToolButton()
+        self.send_button.setText("Send")
+        self.send_button.setIcon(get_send_icon())
+        self.send_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.send_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         self.send_button.clicked.connect(self.send_data)
         command_layout.addWidget(self.send_button)
         
-        second_row.addWidget(command_group, 1)
+        # Separator
+        command_layout.addWidget(self.create_separator())
         
-        top_section.addLayout(second_row)
+        # Special keys section
+        self.enter_key = QToolButton()
+        self.enter_key.setText("Enter")
+        self.enter_key.setIcon(get_enter_icon())
+        self.enter_key.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.enter_key.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        self.enter_key.clicked.connect(lambda: self.send_special_key("Enter"))
+        command_layout.addWidget(self.enter_key)
         
-        main_layout.addLayout(top_section)
+        self.esc_key = QToolButton()
+        self.esc_key.setText("Esc")
+        self.esc_key.setIcon(get_escape_icon())
+        self.esc_key.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.esc_key.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        self.esc_key.clicked.connect(lambda: self.send_special_key("Escape"))
+        command_layout.addWidget(self.esc_key)
         
-        # Bottom Section: TX/RX displays with splitter
+        # Separator
+        command_layout.addWidget(self.create_separator())
+        
+        # History button
+        self.history_button = QToolButton()
+        self.history_button.setText("History")
+        self.history_button.setIcon(get_history_icon())
+        self.history_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.history_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        self.history_button.setToolTip("Command History (Ctrl+H)")
+        self.history_button.clicked.connect(self.show_command_history)
+        command_layout.addWidget(self.history_button)
+        
+        # Push everything to the left
+        command_layout.addStretch()
+        
+        return command_container
+    
+    def create_content_area(self):
+        """Create the content area with TX/RX displays."""
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        self.scaler.margins(content_layout, 12, 8, 12, 8)
+        content_layout.setSpacing(0)
+        
+        # Create splitter for TX/RX displays
         display_splitter = QSplitter(Qt.Orientation.Horizontal)
         display_splitter.setChildrenCollapsible(False)
         
-        # TX Display (left panel)
-        tx_panel = QWidget()
-        tx_layout = QVBoxLayout(tx_panel)
-        tx_layout.setContentsMargins(0, 0, 5, 0)
-        
-        tx_header = QWidget()
-        tx_header_layout = QHBoxLayout(tx_header)
-        
-        tx_title = QLabel("Transmitted Data (TX)")
-        tx_title.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM, weight=QFont.Weight.Bold))
-        tx_header_layout.addWidget(tx_title)
-        
-        tx_header_layout.addStretch()
-        
-        self.clear_tx_button = QPushButton("Clear")
-        self.clear_tx_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        self.clear_tx_button.clicked.connect(self.clear_tx_display)
-        tx_header_layout.addWidget(self.clear_tx_button)
-        
-        tx_layout.addWidget(tx_header)
-        
-        self.tx_display = QTextEdit()
-        self.tx_display.setReadOnly(True)
-        tx_layout.addWidget(self.tx_display)
-        
+        # TX Display panel
+        tx_panel = self.create_display_panel("Transmitted Data (TX)", is_tx=True)
         display_splitter.addWidget(tx_panel)
         
-        # RX Display (right panel)
-        rx_panel = QWidget()
-        rx_layout = QVBoxLayout(rx_panel)
-        rx_layout.setContentsMargins(5, 0, 0, 0)
-        
-        rx_header = QWidget()
-        rx_header_layout = QHBoxLayout(rx_header)
-        
-        rx_title = QLabel("Received Data (RX)")
-        rx_title.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM, weight=QFont.Weight.Bold))
-        rx_header_layout.addWidget(rx_title)
-        
-        rx_header_layout.addStretch()
-        
-        self.clear_rx_button = QPushButton("Clear")
-        self.clear_rx_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        self.clear_rx_button.clicked.connect(self.clear_rx_display)
-        rx_header_layout.addWidget(self.clear_rx_button)
-        
-        rx_layout.addWidget(rx_header)
-        
-        self.rx_display = QTextEdit()
-        self.rx_display.setReadOnly(True)
-        rx_layout.addWidget(self.rx_display)
-        
+        # RX Display panel
+        rx_panel = self.create_display_panel("Received Data (RX)", is_tx=False)
         display_splitter.addWidget(rx_panel)
         
-        # Set initial sizes for display splitter - equal sizes
+        # Set initial sizes - equal
         display_splitter.setSizes([self.scaler.value(500), self.scaler.value(500)])
         
-        main_layout.addWidget(display_splitter, 1)
+        content_layout.addWidget(display_splitter)
         
-        # Bottom Statistics Status Bar
-        stats_frame = QFrame()
-        stats_frame.setFrameStyle(QFrame.Shape.NoFrame)
-        stats_frame_layout = QHBoxLayout(stats_frame)
-        self.scaler.spacing(stats_frame_layout, self.scaler.SPACING_SMALL)
-        self.scaler.margins(stats_frame_layout, self.scaler.SPACING_SMALL, self.scaler.SPACING_SMALL, self.scaler.SPACING_SMALL, self.scaler.SPACING_SMALL)
+        return content_widget
+    
+    def create_display_panel(self, title, is_tx=True):
+        """Create a TX or RX display panel with integrated header."""
+        panel = QFrame()
         
-        # Statistics labels in horizontal layout
-        self.rx_stats_label = QLabel("RX: 0 B/s (0 bytes)")
-        self.rx_stats_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        stats_frame_layout.addWidget(self.rx_stats_label)
+        panel_layout = QVBoxLayout(panel)
+        self.scaler.margins(panel_layout, 8, 8, 8, 8)
+        panel_layout.setSpacing(4)
+        
+        # Create header
+        header_widget = QWidget()
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(0, 0, 0, 4)
+        
+        # Title
+        title_label = QLabel(title)
+        title_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM, weight=QFont.Weight.Bold))
+        header_layout.addWidget(title_label)
+        
+        # Byte count (will be updated dynamically)
+        if is_tx:
+            self.tx_byte_label = QLabel("0 bytes")
+            self.tx_byte_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+            palette = self.tx_byte_label.palette()
+            self.tx_byte_label.setForegroundRole(palette.ColorRole.PlaceholderText)
+            header_layout.addWidget(self.tx_byte_label)
+        else:
+            self.rx_byte_label = QLabel("0 bytes")
+            self.rx_byte_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+            palette = self.rx_byte_label.palette()
+            self.rx_byte_label.setForegroundRole(palette.ColorRole.PlaceholderText)
+            header_layout.addWidget(self.rx_byte_label)
+        
+        header_layout.addStretch()
+        
+        # Clear button (flat style)
+        clear_button = QToolButton()
+        clear_button.setText("Clear")
+        clear_button.setIcon(get_clear_icon())
+        clear_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        clear_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        clear_button.setAutoRaise(True)  # Flat appearance until hovered
+        
+        if is_tx:
+            clear_button.clicked.connect(self.clear_tx_display)
+            self.clear_tx_button = clear_button
+        else:
+            clear_button.clicked.connect(self.clear_rx_display)
+            self.clear_rx_button = clear_button
+        
+        header_layout.addWidget(clear_button)
+        
+        panel_layout.addWidget(header_widget)
+        
+        # Create text display
+        display = QTextEdit()
+        display.setReadOnly(True)
+        display.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+        display.setFont(self.scaler.get_code_font())
+        
+        if is_tx:
+            self.tx_display = display
+        else:
+            self.rx_display = display
+        
+        panel_layout.addWidget(display)
+        
+        return panel
+    
+    def create_status_bar(self):
+        """Create the enhanced status bar."""
+        status_container = QFrame()
+        status_container.setMaximumHeight(self.scaler.value(32))
+        
+        status_layout = QHBoxLayout(status_container)
+        self.scaler.margins(status_layout, 12, 4, 12, 4)
+        self.scaler.spacing(status_layout, 16)
+        
+        # Connection status with indicator
+        connection_widget = QWidget()
+        connection_layout = QHBoxLayout(connection_widget)
+        connection_layout.setContentsMargins(0, 0, 0, 0)
+        connection_layout.setSpacing(4)
+        
+        self.status_indicator = QLabel("●")
+        self.status_indicator.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_MEDIUM))
+        self.update_status_indicator("disconnected")
+        connection_layout.addWidget(self.status_indicator)
+        
+        self.connection_label = QLabel("Disconnected")
+        self.connection_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        connection_layout.addWidget(self.connection_label)
+        
+        status_layout.addWidget(connection_widget)
         
         # Separator
-        separator1 = QLabel(" | ")
-        separator1.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        stats_frame_layout.addWidget(separator1)
+        status_layout.addWidget(self.create_separator())
         
-        self.tx_stats_label = QLabel("TX: 0 B/s (0 bytes)")
-        self.tx_stats_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        stats_frame_layout.addWidget(self.tx_stats_label)
+        # Port info
+        self.port_info_label = QLabel("No Port Selected")
+        self.port_info_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        status_layout.addWidget(self.port_info_label)
         
         # Separator
-        separator2 = QLabel(" | ")
-        separator2.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        stats_frame_layout.addWidget(separator2)
+        status_layout.addWidget(self.create_separator())
         
-        # Connection status
-        self.connection_status = QLabel("Status: Disconnected")
-        self.connection_status.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        stats_frame_layout.addWidget(self.connection_status)
+        # RX Statistics
+        self.rx_stats_label = QLabel("RX: 0 B/s")
+        self.rx_stats_label.setFont(self.scaler.get_code_font(self.scaler.FONT_SIZE_SMALL))
+        status_layout.addWidget(self.rx_stats_label)
         
-        # Stretch to push everything to the left
-        stats_frame_layout.addStretch()
+        # TX Statistics
+        self.tx_stats_label = QLabel("TX: 0 B/s")
+        self.tx_stats_label.setFont(self.scaler.get_code_font(self.scaler.FONT_SIZE_SMALL))
+        status_layout.addWidget(self.tx_stats_label)
         
-        main_layout.addWidget(stats_frame)
+        # Separator
+        status_layout.addWidget(self.create_separator())
         
-        # Store command history
-        self.command_history = []
-        self.history_index = -1
+        # Line count
+        self.line_count_label = QLabel("Lines: 0")
+        self.line_count_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        status_layout.addWidget(self.line_count_label)
         
-        # Set up key press event for command history navigation
-        self.input_line.installEventFilter(self)
+        # Push everything to the left
+        status_layout.addStretch()
+        
+        return status_container
+    
+    def create_section_header(self, text):
+        """Create a section header label."""
+        label = QLabel(text)
+        font = self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL)
+        font.setBold(True)
+        label.setFont(font)
+        return label
+    
+    def create_separator(self):
+        """Create a vertical separator."""
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.VLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        separator.setLineWidth(1)
+        return separator
+    
+    def create_toggle_button(self, text, tooltip=None, checked=False, icon_checked=None, icon_unchecked=None):
+        """Create a standardized toggle button with consistent styling."""
+        button = QToolButton()
+        button.setText(text)
+        button.setCheckable(True)
+        button.setChecked(checked)
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        
+        # Set tooltip if provided
+        if tooltip:
+            button.setToolTip(tooltip)
+        
+        # Set default icons if none provided
+        if not icon_checked:
+            icon_checked = get_toggle_icon(True)
+        if not icon_unchecked:
+            icon_unchecked = get_toggle_icon(False)
+        
+        # Update icon based on checked state
+        def update_icon():
+            if button.isChecked():
+                button.setIcon(icon_checked)
+            else:
+                button.setIcon(icon_unchecked)
+        
+        # Set initial icon and connect toggle handler
+        update_icon()
+        button.toggled.connect(lambda: update_icon())
+        
+        return button
+    
+    def update_status_indicator(self, state):
+        """Update the status indicator color based on state."""
+        palette = self.status_indicator.palette()
+        if state == "connected":
+            # Green for connected
+            palette.setColor(palette.ColorRole.WindowText, Qt.GlobalColor.green)
+        elif state == "connecting":
+            # Yellow for connecting
+            palette.setColor(palette.ColorRole.WindowText, Qt.GlobalColor.yellow)
+        elif state == "error":
+            # Red for error
+            palette.setColor(palette.ColorRole.WindowText, Qt.GlobalColor.red)
+        else:
+            # Gray for disconnected
+            palette.setColor(palette.ColorRole.WindowText, 
+                           palette.color(palette.ColorGroup.Disabled, palette.ColorRole.WindowText))
+        self.status_indicator.setPalette(palette)
     
     def eventFilter(self, obj, event):
         """Handle key events for command history navigation."""
@@ -416,7 +660,7 @@ class SerialTab(QWidget):
         """Update the list of available serial ports."""
         import serial.tools.list_ports
         
-        current_port = self.port_combo.currentText()
+        current_port = self.port_combo.currentData()
         self.port_combo.clear()
         ports = serial.tools.list_ports.comports()
         for port in ports:
@@ -445,14 +689,12 @@ class SerialTab(QWidget):
         baudrate = int(self.baud_combo.currentText())
         if port:
             # Pass auto_termination state to new monitor instance
-            auto_term = True
-            if hasattr(self, 'raw_mode_toggle'):
-                auto_term = self.raw_mode_toggle.isChecked()
+            auto_term = self.auto_term_check.isChecked() if hasattr(self, 'auto_term_check') else True
                 
             self.monitor = SerialMonitor(
                 port=port, 
                 baudrate=baudrate, 
-                timestamp=self.timestamp_toggle.isChecked(),
+                timestamp=self.timestamp_check.isChecked() if hasattr(self, 'timestamp_check') else False,
                 auto_termination=auto_term
             )
             
@@ -473,13 +715,17 @@ class SerialTab(QWidget):
         if self.monitor and self.monitor.ser and self.monitor.ser.is_open:
             self.monitor.stop()
             self.connect_button.setText("Connect")
+            self.connect_button.setIcon(get_connect_icon())
             self.connect_button.setChecked(False)
-            self.connection_status.setText("Status: Disconnected")
+            self.connection_label.setText("Disconnected")
+            self.update_status_indicator("disconnected")
         else:
             if self.monitor and self.monitor.start():
                 self.connect_button.setText("Disconnect")
+                self.connect_button.setIcon(get_clear_icon())
                 self.connect_button.setChecked(True)
-                self.connection_status.setText("Status: Connected")
+                self.connection_label.setText("Connected")
+                self.update_status_indicator("connected")
         self.update_status()
     
     def setup_serial_thread(self):
@@ -496,8 +742,11 @@ class SerialTab(QWidget):
         if hasattr(self.monitor, 'stats'):
             self.monitor.stats['rx_bytes'] = self.rx_bytes
         
+        # Update byte label
+        self.rx_byte_label.setText(f"{self.rx_bytes} bytes")
+        
         # Apply filtering if enabled
-        if hasattr(self, 'filter_rx_toggle') and self.filter_rx_toggle.isChecked():
+        if hasattr(self, 'filter_check') and self.filter_check.isChecked():
             # Simple filter: only show printable ASCII and common control chars
             filtered_text = ""
             for c in text:
@@ -518,6 +767,9 @@ class SerialTab(QWidget):
         cursor.insertText(f"[RX] {text}\n")
         self.rx_display.setTextCursor(cursor)
         self.rx_display.ensureCursorVisible()
+        
+        # Update line count
+        self.update_line_count()
     
     def send_data(self):
         """Send data to the serial port with visual feedback."""
@@ -539,12 +791,13 @@ class SerialTab(QWidget):
                 # Update completer
                 self.setup_command_completer()
             
-            # Visual feedback - briefly disable the input and change button appearance
+            # Enhanced visual feedback
             self.input_line.setEnabled(False)
             self.send_button.setText("Sending...")
+            self.send_button.setIcon(get_toggle_icon(True))
             
             # Use a timer to restore the UI after a short delay
-            QTimer.singleShot(150, self.restore_send_ui)
+            QTimer.singleShot(200, self.restore_send_ui)
             
             # Continue with data sending
             sent_data = self.monitor.send_data(text)
@@ -553,6 +806,9 @@ class SerialTab(QWidget):
                 self.tx_bytes += len(sent_data)
                 if hasattr(self.monitor, 'stats'):
                     self.monitor.stats['tx_bytes'] = self.tx_bytes
+                
+                # Update byte label
+                self.tx_byte_label.setText(f"{self.tx_bytes} bytes")
                 
                 display_text = text
                 if self.monitor.hex_display:
@@ -566,13 +822,17 @@ class SerialTab(QWidget):
                 cursor.insertText(f"[TX] {display_text}\n")
                 self.tx_display.setTextCursor(cursor)
                 self.tx_display.ensureCursorVisible()
+                
+                # Update line count
+                self.update_line_count()
             self.input_line.clear()
     
     def restore_send_ui(self):
-        """Restore UI after send operation."""
+        """Restore UI after send operation with enhanced feedback."""
         self.input_line.setEnabled(True)
         self.input_line.setFocus()
         self.send_button.setText("Send")
+        self.send_button.setIcon(get_send_icon())
     
     def send_special_key(self, key):
         """Send a special key directly to the serial connection."""
@@ -591,6 +851,9 @@ class SerialTab(QWidget):
             if hasattr(self.monitor, 'stats'):
                 self.monitor.stats['tx_bytes'] = self.tx_bytes
             
+            # Update byte label
+            self.tx_byte_label.setText(f"{self.tx_bytes} bytes")
+            
             # Display the key press in the TX display
             cursor = self.tx_display.textCursor()
             format = QTextCharFormat()
@@ -598,56 +861,36 @@ class SerialTab(QWidget):
             cursor.insertText(f"[KEY] {key}\n")
             self.tx_display.setTextCursor(cursor)
             self.tx_display.ensureCursorVisible()
+            
+            # Update line count
+            self.update_line_count()
     
     def toggle_timestamp(self):
         """Toggle timestamp display."""
         if self.monitor:
-            self.monitor.timestamp = not self.monitor.timestamp
-            if self.monitor.timestamp:
-                self.timestamp_toggle.setChecked(True)
-                self.status_message.emit("Timestamp display: ON", 3000)
-            else:
-                self.timestamp_toggle.setChecked(False)
-                self.status_message.emit("Timestamp display: OFF", 3000)
+            self.monitor.timestamp = self.timestamp_check.isChecked()
+            self.status_message.emit(f"Timestamp: {'ON' if self.monitor.timestamp else 'OFF'}", 3000)
     
     def toggle_hex(self):
         """Toggle hex display mode."""
         if self.monitor:
-            self.monitor.hex_display = not self.monitor.hex_display
-            if self.monitor.hex_display:
-                self.hex_toggle.setChecked(True)
-                self.status_message.emit("HEX display mode: ON", 3000)
-            else:
-                self.hex_toggle.setChecked(False)
-                self.status_message.emit("HEX display mode: OFF", 3000)
+            self.monitor.hex_display = self.hex_check.isChecked()
+            self.status_message.emit(f"Hex mode: {'ON' if self.monitor.hex_display else 'OFF'}", 3000)
     
     def toggle_raw_mode(self):
         """Toggle raw mode (whether termination chars are auto-added)."""
         if self.monitor:
-            self.monitor.auto_termination = not self.monitor.auto_termination
-            if self.monitor.auto_termination:
-                self.raw_mode_toggle.setChecked(True)
-                self.status_message.emit("Auto-termination: ON", 3000)
-            else:
-                self.raw_mode_toggle.setChecked(False)
-                self.status_message.emit("Auto-termination: OFF (Raw Mode)", 3000)
+            self.monitor.auto_termination = self.auto_term_check.isChecked()
+            self.status_message.emit(f"Auto-termination: {'ON' if self.monitor.auto_termination else 'OFF (Raw Mode)'}", 3000)
     
     def toggle_auto_clear(self):
         """Toggle auto-clear of RX display on new command."""
-        self.auto_clear_rx = not self.auto_clear_rx
-        if self.auto_clear_rx:
-            self.auto_clear_toggle.setChecked(True)
-            self.status_message.emit("Auto-clear RX on command: ENABLED", 3000)
-        else:
-            self.auto_clear_toggle.setChecked(False)
-            self.status_message.emit("Auto-clear RX on command: DISABLED", 3000)
+        self.auto_clear_rx = self.auto_clear_check.isChecked()
+        self.status_message.emit(f"Auto-clear: {'ON' if self.auto_clear_rx else 'OFF'}", 3000)
     
     def toggle_rx_filter(self):
         """Toggle filtering of non-printable characters in RX display."""
-        if self.filter_rx_toggle.isChecked():
-            self.status_message.emit("RX filtering: ENABLED", 3000)
-        else:
-            self.status_message.emit("RX filtering: DISABLED", 3000)
+        self.status_message.emit(f"RX filter: {'ON' if self.filter_check.isChecked() else 'OFF'}", 3000)
     
     def clear_rx_display(self):
         """Clear the RX display window."""
@@ -666,28 +909,25 @@ class SerialTab(QWidget):
         self.status_message.emit("All displays cleared", 3000)
     
     def update_status(self):
-        """Update connection status in parent window."""
-        # Emit status to parent window
-        port = self.port_combo.currentData() or "N/A"
+        """Update connection status in status bar."""
+        port = self.port_combo.currentData() or "None"
         baud = self.baud_combo.currentText()
-        status = "ONLINE" if self.monitor and self.monitor.ser and self.monitor.ser.is_open else "OFFLINE"
         
-        # Update button appearance based on connection status
-        if status == "ONLINE":
-            self.connect_button.setText("Disconnect")
-            self.connect_button.setChecked(True)
-            self.connection_status.setText("Status: Connected")
+        if self.monitor and self.monitor.ser and self.monitor.ser.is_open:
+            self.port_info_label.setText(f"{port} @ {baud} 8N1")
+            self.connection_label.setText("Connected")
+            self.update_status_indicator("connected")
         else:
-            self.connect_button.setText("Connect")
-            self.connect_button.setChecked(False)
-            self.connection_status.setText("Status: Disconnected")
-        
-        # Emit connection info to parent
-        self.status_message.emit(f"PORT: {port} | BAUD: {baud} | STATUS: {status}", 0)
+            self.port_info_label.setText("No Connection")
+            self.connection_label.setText("Disconnected")
+            self.update_status_indicator("disconnected")
     
     def handle_error(self, message):
         """Handle error messages and update UI."""
         self.error_occurred.emit(message)
+        
+        # Update status indicator
+        self.update_status_indicator("error")
         
         # Make errors more visible in RX display
         cursor = self.rx_display.textCursor()
@@ -697,6 +937,9 @@ class SerialTab(QWidget):
         cursor.insertText(f"[ERROR] {message}\n")
         self.rx_display.setTextCursor(cursor)
         self.rx_display.ensureCursorVisible()
+        
+        # Update line count
+        self.update_line_count()
         
         # Provide visual feedback
         QTimer.singleShot(100, lambda: self.flash_error_indicator(message))
@@ -708,6 +951,9 @@ class SerialTab(QWidget):
         # Restore UI if needed
         if not self.input_line.isEnabled():
             self.restore_send_ui()
+        
+        # Restore normal status indicator after delay
+        QTimer.singleShot(3000, lambda: self.update_status_indicator("disconnected"))
     
     def update_stats(self):
         """Update RX/TX statistics display."""
@@ -726,20 +972,27 @@ class SerialTab(QWidget):
             
             # Format for display
             if rx_rate < 1024:
-                rx_rate_str = f"{rx_rate:.1f} B/s"
+                rx_rate_str = f"RX: {rx_rate:.1f} B/s"
             else:
-                rx_rate_str = f"{rx_rate/1024:.1f} KB/s"
+                rx_rate_str = f"RX: {rx_rate/1024:.1f} KB/s"
                 
             if tx_rate < 1024:
-                tx_rate_str = f"{tx_rate:.1f} B/s"
+                tx_rate_str = f"TX: {tx_rate:.1f} B/s"
             else:
-                tx_rate_str = f"{tx_rate/1024:.1f} KB/s"
+                tx_rate_str = f"TX: {tx_rate/1024:.1f} KB/s"
             
-            # Update labels with improved formatting
-            self.rx_stats_label.setText(f"RX: {rx_rate_str} ({self.rx_bytes} bytes)")
-            self.tx_stats_label.setText(f"TX: {tx_rate_str} ({self.tx_bytes} bytes)")
+            # Update labels
+            self.rx_stats_label.setText(rx_rate_str)
+            self.tx_stats_label.setText(tx_rate_str)
             
             # Store values for next calculation
             self.last_rx = self.rx_bytes
             self.last_tx = self.tx_bytes
             self.last_time = now
+    
+    def update_line_count(self):
+        """Update the line count in the status bar."""
+        rx_lines = self.rx_display.document().lineCount()
+        tx_lines = self.tx_display.document().lineCount()
+        total_lines = rx_lines + tx_lines
+        self.line_count_label.setText(f"Lines: {total_lines:,}")

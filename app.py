@@ -17,6 +17,8 @@ def main():
     app = QApplication(sys.argv)
     
     # Set the application style to Fusion for consistent cross-platform theming
+    # To test Windows style, comment out the line above and uncomment the line below:
+    # app.setStyle('Windows')
     app.setStyle('Fusion')
     
     # Create main window
