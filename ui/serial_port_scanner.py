@@ -185,10 +185,6 @@ class SerialPortScannerTab(QWidget):
         content_widget = self.create_content_area()
         main_layout.addWidget(content_widget, 1)
         
-        # Create command bar
-        command_bar = self.create_command_bar()
-        main_layout.addWidget(command_bar)
-        
         # Create enhanced status bar
         status_bar = self.create_status_bar()
         main_layout.addWidget(status_bar)
@@ -213,22 +209,24 @@ class SerialPortScannerTab(QWidget):
         self.scaler.spacing(ribbon_layout, 16)
         
         # Add sections
-        ribbon_layout.addLayout(self.create_scanning_section())
+        ribbon_layout.addLayout(self.create_discovery_section())
         ribbon_layout.addWidget(self.create_separator())
-        ribbon_layout.addLayout(self.create_detection_section())
+        ribbon_layout.addLayout(self.create_analysis_section())
         ribbon_layout.addWidget(self.create_separator())
-        ribbon_layout.addLayout(self.create_display_section())
+        ribbon_layout.addLayout(self.create_operations_section())
+        ribbon_layout.addWidget(self.create_separator())
+        ribbon_layout.addLayout(self.create_filtering_section())
         ribbon_layout.addStretch()
         
         return ribbon_container
     
-    def create_scanning_section(self):
-        """Create the scanning section of the ribbon (adapted from connection section)."""
+    def create_discovery_section(self):
+        """Create the Discovery section - port enumeration and scanning operations."""
         section_layout = QVBoxLayout()
         section_layout.setSpacing(self.scaler.value(8))
         
         # Section header
-        header = self.create_section_header("Scanning")
+        header = self.create_section_header("Discovery")
         section_layout.addWidget(header)
         
         # Controls layout
@@ -257,9 +255,11 @@ class SerialPortScannerTab(QWidget):
         self.auto_refresh_toggle.clicked.connect(self.toggle_auto_refresh)
         row1.addWidget(self.auto_refresh_toggle)
         
+        # Add stretch to left-align controls
+        row1.addStretch()
         controls_layout.addLayout(row1)
         
-        # Row 2: Scan and Test buttons
+        # Row 2: Scan button only
         row2 = QHBoxLayout()
         row2.setSpacing(self.scaler.value(8))
         
@@ -273,19 +273,8 @@ class SerialPortScannerTab(QWidget):
         self.scan_button.clicked.connect(self.scan_ports)
         row2.addWidget(self.scan_button)
         
-        # Test ports toggle (preserve existing test functionality)
-        self.test_ports_toggle = QToolButton()
-        self.test_ports_toggle.setText("Test")
-        self.test_ports_toggle.setIcon(get_toggle_icon(False))
-        self.test_ports_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.test_ports_toggle.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        self.test_ports_toggle.setCheckable(True)
-        self.test_ports_toggle.clicked.connect(self.toggle_port_testing)
-        row2.addWidget(self.test_ports_toggle)
-        
         # Add stretch to left-align buttons
         row2.addStretch()
-        
         controls_layout.addLayout(row2)
         
         section_layout.addLayout(controls_layout)
@@ -293,48 +282,142 @@ class SerialPortScannerTab(QWidget):
         
         return section_layout
     
-    def create_detection_section(self):
-        """Create the detection section of the ribbon."""
+    def create_analysis_section(self):
+        """Create the Analysis section - port testing and device identification."""
         section_layout = QVBoxLayout()
         section_layout.setSpacing(self.scaler.value(8))
         
         # Section header
-        header = self.create_section_header("Detection")
+        header = self.create_section_header("Analysis")
         section_layout.addWidget(header)
         
-        # Grid layout for toggle buttons (2x2)
-        grid = QGridLayout()
-        grid.setSpacing(self.scaler.value(8))
-        grid.setHorizontalSpacing(self.scaler.value(8))
-        grid.setVerticalSpacing(self.scaler.value(8))
+        # Controls layout
+        controls_layout = QVBoxLayout()
+        controls_layout.setSpacing(self.scaler.value(8))
+        
+        # Row 1: Testing and identification toggles
+        row1 = QHBoxLayout()
+        row1.setSpacing(self.scaler.value(8))
+        
+        # Test ports toggle (moved from Discovery)
+        self.test_ports_toggle = QToolButton()
+        self.test_ports_toggle.setText("Test")
+        self.test_ports_toggle.setIcon(get_toggle_icon(False))
+        self.test_ports_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.test_ports_toggle.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        self.test_ports_toggle.setCheckable(True)
+        self.test_ports_toggle.setToolTip("Test port availability")
+        self.test_ports_toggle.clicked.connect(self.toggle_port_testing)
+        row1.addWidget(self.test_ports_toggle)
         
         # Enhanced ID toggle
         self.enhanced_id_check = self.create_toggle_button("Enhanced ID", 
             "Use enhanced device identification", checked=True)
-        grid.addWidget(self.enhanced_id_check, 0, 0)
+        row1.addWidget(self.enhanced_id_check)
         
         # VID/PID Parse toggle
         self.vid_pid_parse_check = self.create_toggle_button("VID/PID", 
             "Extract and display VID/PID information", checked=True)
-        grid.addWidget(self.vid_pid_parse_check, 0, 1)
+        row1.addWidget(self.vid_pid_parse_check)
         
-        # Speed detection toggle
-        self.speed_detect_check = self.create_toggle_button("Speed Det", 
-            "Auto-detect communication speeds", checked=False)
-        grid.addWidget(self.speed_detect_check, 1, 0)
+        # Add stretch to left-align toggles
+        row1.addStretch()
+        controls_layout.addLayout(row1)
         
-        section_layout.addLayout(grid)
+        # Row 2: Action buttons
+        row2 = QHBoxLayout()
+        row2.setSpacing(self.scaler.value(8))
+        
+        # Identify Device action button
+        self.identify_device_button = QToolButton()
+        self.identify_device_button.setText("Identify Device")
+        self.identify_device_button.setIcon(get_send_icon())
+        self.identify_device_button.setToolTip("Identify Selected Device")
+        self.identify_device_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.identify_device_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        self.identify_device_button.clicked.connect(self.identify_selected_device)
+        row2.addWidget(self.identify_device_button)
+        
+        # Auto-Speed button (moved from Discovery)
+        self.autodetect_speed_button = QToolButton()
+        self.autodetect_speed_button.setText("Auto-Speed")
+        self.autodetect_speed_button.setIcon(get_enter_icon())
+        self.autodetect_speed_button.setToolTip("Auto-detect Port Speed")
+        self.autodetect_speed_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.autodetect_speed_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        self.autodetect_speed_button.clicked.connect(self.autodetect_port_speed)
+        row2.addWidget(self.autodetect_speed_button)
+        
+        # Add stretch to left-align buttons
+        row2.addStretch()
+        controls_layout.addLayout(row2)
+        
+        section_layout.addLayout(controls_layout)
         section_layout.addStretch()
         
         return section_layout
     
-    def create_display_section(self):
-        """Create the display section of the ribbon."""
+    def create_operations_section(self):
+        """Create the Operations section - active monitoring and data export."""
         section_layout = QVBoxLayout()
         section_layout.setSpacing(self.scaler.value(8))
         
         # Section header
-        header = self.create_section_header("Display")
+        header = self.create_section_header("Operations")
+        section_layout.addWidget(header)
+        
+        # Controls layout
+        controls_layout = QVBoxLayout()
+        controls_layout.setSpacing(self.scaler.value(8))
+        
+        # Row 1: Monitor toggle
+        row1 = QHBoxLayout()
+        row1.setSpacing(self.scaler.value(8))
+        
+        # Monitor toggle button (moved from old display section)
+        self.monitor_button = QToolButton()
+        self.monitor_button.setText("Monitor")
+        self.monitor_button.setIcon(get_history_icon())
+        self.monitor_button.setToolTip("Toggle Port Monitoring")
+        self.monitor_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.monitor_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        self.monitor_button.setCheckable(True)
+        self.monitor_button.clicked.connect(self.toggle_port_monitoring)
+        row1.addWidget(self.monitor_button)
+        
+        # Add stretch to left-align
+        row1.addStretch()
+        controls_layout.addLayout(row1)
+        
+        # Row 2: Export button
+        row2 = QHBoxLayout()
+        row2.setSpacing(self.scaler.value(8))
+        
+        self.export_button = QToolButton()
+        self.export_button.setText("Export")
+        self.export_button.setIcon(get_history_icon())
+        self.export_button.setToolTip("Export Port Information")
+        self.export_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.export_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        self.export_button.clicked.connect(self.export_port_info)
+        row2.addWidget(self.export_button)
+        
+        # Add stretch to left-align
+        row2.addStretch()
+        controls_layout.addLayout(row2)
+        
+        section_layout.addLayout(controls_layout)
+        section_layout.addStretch()
+        
+        return section_layout
+    
+    def create_filtering_section(self):
+        """Create the Filtering section - display and view controls."""
+        section_layout = QVBoxLayout()
+        section_layout.setSpacing(self.scaler.value(8))
+        
+        # Section header
+        header = self.create_section_header("Filtering")
         section_layout.addWidget(header)
         
         # Controls layout
@@ -353,17 +436,9 @@ class SerialPortScannerTab(QWidget):
             "Show only USB serial devices", checked=False)
         row1.addWidget(self.show_usb_only_check)
         
+        # Add stretch to left-align toggles
         row1.addStretch()
         controls_layout.addLayout(row1)
-        
-        # Row 2: Export button (preserve existing export functionality)
-        self.export_button = QToolButton()
-        self.export_button.setText("Export")
-        self.export_button.setIcon(get_history_icon())
-        self.export_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.export_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        self.export_button.clicked.connect(self.export_port_info)
-        controls_layout.addWidget(self.export_button)
         
         section_layout.addLayout(controls_layout)
         section_layout.addStretch()
@@ -583,76 +658,6 @@ class SerialPortScannerTab(QWidget):
         
         return panel
     
-    def create_command_bar(self):
-        """Create the command bar for scanner functions."""
-        command_container = QWidget()
-        command_container.setMaximumHeight(self.scaler.value(48))
-        
-        # Frame for the command bar
-        command_frame = QFrame(command_container)
-        
-        container_layout = QVBoxLayout(command_container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-        container_layout.addWidget(command_frame)
-        
-        # Main command bar layout
-        command_layout = QHBoxLayout(command_frame)
-        self.scaler.margins(command_layout, 12, 6, 12, 6)
-        self.scaler.spacing(command_layout, 8)
-        
-        # Selected port display
-        port_label = QLabel("Selected Port:")
-        port_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        command_layout.addWidget(port_label)
-        
-        self.selected_port_display = QLineEdit()
-        self.selected_port_display.setFont(self.scaler.get_code_font())
-        self.selected_port_display.setPlaceholderText("Select a port from the table...")
-        self.selected_port_display.setReadOnly(True)
-        self.selected_port_display.setMinimumWidth(self.scaler.value(300))
-        self.selected_port_display.setMinimumHeight(self.scaler.value(28))
-        command_layout.addWidget(self.selected_port_display, 3)  # Same stretch factor
-        
-        # Primary action button (Identify Device)
-        self.identify_device_button = QToolButton()
-        self.identify_device_button.setText("Identify Device")
-        self.identify_device_button.setIcon(get_send_icon())
-        self.identify_device_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.identify_device_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        self.identify_device_button.clicked.connect(self.identify_selected_device)
-        command_layout.addWidget(self.identify_device_button)
-        
-        # Separator
-        command_layout.addWidget(self.create_separator())
-        
-        # Secondary actions
-        self.autodetect_speed_button = QToolButton()
-        self.autodetect_speed_button.setText("Auto-Speed")
-        self.autodetect_speed_button.setIcon(get_enter_icon())
-        self.autodetect_speed_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.autodetect_speed_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        self.autodetect_speed_button.clicked.connect(self.autodetect_port_speed)
-        command_layout.addWidget(self.autodetect_speed_button)
-        
-        # Separator
-        command_layout.addWidget(self.create_separator())
-        
-        # Monitor toggle button
-        self.monitor_button = QToolButton()
-        self.monitor_button.setText("Monitor")
-        self.monitor_button.setIcon(get_history_icon())
-        self.monitor_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.monitor_button.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
-        self.monitor_button.setCheckable(True)
-        self.monitor_button.setToolTip("Toggle Port Monitoring")
-        self.monitor_button.clicked.connect(self.toggle_port_monitoring)
-        command_layout.addWidget(self.monitor_button)
-        
-        # Same stretch at end
-        command_layout.addStretch()
-        
-        return command_container
-    
     def create_status_bar(self):
         """Create the enhanced status bar with scanner statistics."""
         status_container = QFrame()
@@ -686,6 +691,14 @@ class SerialPortScannerTab(QWidget):
         self.port_count_status_label = QLabel("0 Ports Found")
         self.port_count_status_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
         status_layout.addWidget(self.port_count_status_label)
+        
+        # Separator
+        status_layout.addWidget(self.create_separator())
+        
+        # Selected port info
+        self.selected_port_status_label = QLabel("No Port Selected")
+        self.selected_port_status_label.setFont(self.scaler.get_ui_font(self.scaler.FONT_SIZE_SMALL))
+        status_layout.addWidget(self.selected_port_status_label)
         
         # Separator
         status_layout.addWidget(self.create_separator())
@@ -913,20 +926,25 @@ class SerialPortScannerTab(QWidget):
         selected_items = self.ports_table.selectedItems()
         if not selected_items:
             self.details_text.setText("Select a port to view detailed information")
-            # Clear command bar selection
-            if hasattr(self, 'selected_port_display'):
-                self.selected_port_display.clear()
-                self.selected_port_display.setPlaceholderText("Select a port from the table...")
+            # Update status bar to show no selection
+            if hasattr(self, 'selected_port_status_label'):
+                self.selected_port_status_label.setText("No Port Selected")
             return
         
         # Get the port name from the first column
         row = self.ports_table.row(selected_items[0])
         port_name = self.ports_table.item(row, 0).text()
         
-        # Update command bar with selected port
-        if hasattr(self, 'selected_port_display'):
-            self.selected_port_display.setText(port_name)
-            self.selected_port_display.setPlaceholderText("")
+        # Update status bar with selected port info
+        if hasattr(self, 'selected_port_status_label') and port_name in self.port_info:
+            port_info = self.port_info[port_name]
+            # Create concise status text
+            device_desc = port_info.get('description', 'Unknown Device')
+            # Truncate long descriptions
+            if len(device_desc) > 30:
+                device_desc = device_desc[:27] + "..."
+            status_text = f"Selected: {port_name} ({device_desc})"
+            self.selected_port_status_label.setText(status_text)
         
         # Get port info
         if port_name in self.port_info:
