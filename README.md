@@ -2,6 +2,13 @@
 
 Network diagnostic and serial communication tool built with PyQt6.
 
+<img width="1366" height="730" alt="image" src="https://github.com/user-attachments/assets/e7f3c38e-4dcd-46be-87b2-e3257426f74d" />
+
+<img width="1366" height="730" alt="image" src="https://github.com/user-attachments/assets/74e9cc27-b15e-4d2e-8c0d-d2389cacbebd" />
+
+<img width="1366" height="730" alt="image" src="https://github.com/user-attachments/assets/8716adee-1e09-4ca8-b48e-8ab1da6f6c4b" />
+
+
 ## Features
 
 **Network Scanning**
@@ -72,3 +79,4 @@ pyinstaller app.spec
 - Handles large IP ranges through batched processing
 - Custom UI scaling system for different screen sizes
 - Resource cleanup on application exit
+
